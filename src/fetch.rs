@@ -33,7 +33,7 @@ impl Default for FetchConfiguration {
     }
 }
 
-/// A successfully retrieved HTTP response.
+/// An HTTP response retrieved by a document fetcher.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FetchedDocument {
     url: Url,
@@ -42,6 +42,11 @@ pub struct FetchedDocument {
 }
 
 impl FetchedDocument {
+    /// Creates a fetched document from its response details.
+    pub fn new(url: Url, status: u16, body: String) -> Self {
+        Self { url, status, body }
+    }
+
     /// Returns the URL that produced this response.
     pub fn url(&self) -> &Url {
         &self.url
@@ -149,11 +154,7 @@ impl DocumentFetcher for HttpDocumentFetcher {
                     let document_url = response.url().clone();
                     let status = response.status().as_u16();
                     let body = response.text().map_err(FetchError::ResponseBody)?;
-                    return Ok(FetchedDocument {
-                        url: document_url,
-                        status,
-                        body,
-                    });
+                    return Ok(FetchedDocument::new(document_url, status, body));
                 }
                 Err(_) if retries_remaining > 0 => {
                     retries_remaining -= 1;

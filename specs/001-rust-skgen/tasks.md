@@ -60,7 +60,7 @@ Hecho cuando: Tests convierten enlaces relativos a URLs absolutas y descartan es
 RF: RF-3, RF-4.
 Hecho cuando: Un HTML de prueba produce una página documental con contenido y URL atribuible, y contenido no documental produce un error.
 
-- [ ] T16. Implementar el recorrido completo determinista del sitio.
+- [x] T16. Implementar el recorrido completo determinista del sitio.
 RF: RF-3, RF-4.
 Hecho cuando: Tests con un grafo local verifican recorrido hasta agotamiento, orden estable, inclusión obligatoria de la página inicial y eliminación de duplicados.
 

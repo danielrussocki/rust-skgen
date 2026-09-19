@@ -1,11 +1,165 @@
 //! Related documentation discovery boundary.
 
-use crate::domain::{AuthorizedHost, SiteBoundary};
+use std::collections::BTreeSet;
+
+use crate::{
+    domain::{
+        AuthorizedHost, DiscoveryConfiguration, DiscoveryScope, DocumentationPage, SiteBoundary,
+    },
+    extract::{DocumentExtractionError, extract_document, extract_links},
+    fetch::{DocumentFetcher, FetchError},
+    policy::{CrawlPolicy, RobotsError},
+};
 use scraper::{Html, Selector};
 use url::Url;
 
 /// Marks a component that discovers documentation pages.
 pub trait SiteDiscoverer {}
+
+/// Error returned while discovering documentation pages.
+#[derive(Debug)]
+pub enum DiscoveryError {
+    /// The crawl policy could not be evaluated.
+    Policy(RobotsError),
+    /// A source document could not be retrieved.
+    Fetch(FetchError),
+    /// The crawl policy prohibited a source document.
+    Forbidden(Url),
+    /// A source document did not return a successful HTTP status.
+    UnexpectedStatus { url: Url, status: u16 },
+    /// A source document did not contain extractable documentation.
+    Extraction(DocumentExtractionError),
+}
+
+impl std::fmt::Display for DiscoveryError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Policy(error) => write!(formatter, "failed to evaluate crawl policy: {error}"),
+            Self::Fetch(error) => write!(formatter, "failed to retrieve documentation: {error}"),
+            Self::Forbidden(url) => write!(formatter, "crawl policy forbids URL: {url}"),
+            Self::UnexpectedStatus { url, status } => {
+                write!(
+                    formatter,
+                    "URL returned unexpected HTTP status {status}: {url}"
+                )
+            }
+            Self::Extraction(error) => {
+                write!(formatter, "failed to extract documentation: {error}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for DiscoveryError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Policy(error) => Some(error),
+            Self::Fetch(error) => Some(error),
+            Self::Extraction(error) => Some(error),
+            Self::Forbidden(_) | Self::UnexpectedStatus { .. } => None,
+        }
+    }
+}
+
+/// Discovers all in-scope documentation pages using deterministic URL order.
+pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
+    source_url: Url,
+    configuration: &DiscoveryConfiguration,
+    fetcher: &F,
+    policy: &P,
+) -> Result<Vec<DocumentationPage>, DiscoveryError> {
+    let source_canonical = normalize_visit_url(&source_url);
+    let source_document = fetch_document(source_url.clone(), fetcher, policy)?;
+    let source_page = extract_document(source_url.clone(), source_document.body())
+        .map_err(DiscoveryError::Extraction)?;
+    let navigation_urls = navigation_urls(&source_url, source_document.body());
+    let mut visited = BTreeSet::from([source_canonical]);
+    let mut queue = source_links(&source_url, source_document.body(), configuration.scope());
+    let mut pages = vec![source_page];
+
+    while let Some(candidate) = queue.pop_first() {
+        let candidate = normalize_visit_url(&candidate);
+        if !visited.insert(candidate.clone())
+            || !is_in_scope(&source_url, &candidate, configuration, &navigation_urls)
+        {
+            continue;
+        }
+
+        let document = fetch_document(candidate.clone(), fetcher, policy)?;
+        let page = extract_document(candidate.clone(), document.body())
+            .map_err(DiscoveryError::Extraction)?;
+        queue.extend(
+            extract_links(&candidate, document.body())
+                .into_iter()
+                .map(|url| normalize_visit_url(&url)),
+        );
+        pages.push(page);
+    }
+
+    pages.sort_by_key(|page| normalize_visit_url(page.source_url()).to_string());
+    Ok(pages)
+}
+
+fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
+    url: Url,
+    fetcher: &F,
+    policy: &P,
+) -> Result<crate::fetch::FetchedDocument, DiscoveryError> {
+    if !policy.allows(&url).map_err(DiscoveryError::Policy)? {
+        return Err(DiscoveryError::Forbidden(url));
+    }
+
+    let document = fetcher.fetch(url.clone()).map_err(DiscoveryError::Fetch)?;
+    if !(200..300).contains(&document.status()) {
+        return Err(DiscoveryError::UnexpectedStatus {
+            url,
+            status: document.status(),
+        });
+    }
+
+    Ok(document)
+}
+
+fn source_links(source_url: &Url, html: &str, scope: DiscoveryScope) -> BTreeSet<Url> {
+    match scope {
+        DiscoveryScope::DocumentationNavigation => navigation_urls(source_url, html),
+        DiscoveryScope::SameSite | DiscoveryScope::PathPrefix | DiscoveryScope::ParentDirectory => {
+            extract_links(source_url, html)
+                .into_iter()
+                .map(|url| normalize_visit_url(&url))
+                .collect()
+        }
+    }
+}
+
+fn navigation_urls(source_url: &Url, html: &str) -> BTreeSet<Url> {
+    navigation_links(html)
+        .into_iter()
+        .filter_map(|href| source_url.join(&href).ok())
+        .filter(|url| matches!(url.scheme(), "http" | "https"))
+        .map(|url| normalize_visit_url(&url))
+        .collect()
+}
+
+fn is_in_scope(
+    source_url: &Url,
+    candidate: &Url,
+    configuration: &DiscoveryConfiguration,
+    navigation_urls: &BTreeSet<Url>,
+) -> bool {
+    match configuration.scope() {
+        DiscoveryScope::SameSite => is_within_site_boundary(
+            source_url,
+            candidate,
+            configuration.site_boundary(),
+            configuration.authorized_subdomains(),
+            true,
+        ),
+        DiscoveryScope::PathPrefix => is_within_path_prefix(source_url, candidate),
+        DiscoveryScope::ParentDirectory => is_within_parent_directory(source_url, candidate),
+        DiscoveryScope::DocumentationNavigation => navigation_urls.contains(candidate),
+    }
+}
 
 /// Returns link targets found within HTML navigation elements.
 pub fn navigation_links(html: &str) -> Vec<String> {
@@ -126,4 +280,98 @@ fn parent_directory(path: &str) -> &str {
     };
 
     &path[..=index]
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, collections::BTreeMap};
+
+    use super::discover_all;
+    use crate::{
+        domain::DiscoveryConfiguration,
+        fetch::{DocumentFetcher, FetchError, FetchedDocument},
+        policy::{CrawlPolicy, RobotsError},
+    };
+    use url::Url;
+
+    struct GraphFetcher {
+        documents: BTreeMap<Url, String>,
+        fetched_urls: RefCell<Vec<Url>>,
+    }
+
+    impl GraphFetcher {
+        fn new(documents: BTreeMap<Url, String>) -> Self {
+            Self {
+                documents,
+                fetched_urls: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl DocumentFetcher for GraphFetcher {
+        fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
+            self.fetched_urls.borrow_mut().push(url.clone());
+            Ok(FetchedDocument::new(
+                url.clone(),
+                200,
+                self.documents[&url].clone(),
+            ))
+        }
+    }
+
+    struct AllowAllPolicy;
+
+    impl CrawlPolicy for AllowAllPolicy {
+        fn allows(&self, _url: &Url) -> Result<bool, RobotsError> {
+            Ok(true)
+        }
+    }
+
+    fn url(path: &str) -> Url {
+        Url::parse(&format!("https://docs.example.com{path}")).expect("test URL must be valid")
+    }
+
+    fn document(body: &str) -> String {
+        format!("<main><p>{body}</p></main>")
+    }
+
+    #[test]
+    fn traverses_all_in_scope_pages_in_canonical_order_without_duplicates() {
+        let source_url = url("/start");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            source_url.clone(),
+            format!(
+                "{}<a href=\"/z\">Z</a><a href=\"/a?first\">A</a><a href=\"/a#section\">A duplicate</a><a href=\"https://other.example.com/outside\">Outside</a>",
+                document("Start")
+            ),
+        );
+        documents.insert(url("/a"), format!("{}<a href=\"/b\">B</a>", document("A")));
+        documents.insert(
+            url("/b"),
+            format!("{}<a href=\"/z#related\">Z duplicate</a>", document("B")),
+        );
+        documents.insert(url("/z"), document("Z"));
+        let fetcher = GraphFetcher::new(documents);
+
+        let pages = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("the local documentation graph should be discovered");
+
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.source_url().clone())
+                .collect::<Vec<_>>(),
+            vec![url("/a"), url("/b"), source_url, url("/z")]
+        );
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![url("/start"), url("/a"), url("/b"), url("/z")]
+        );
+    }
 }
