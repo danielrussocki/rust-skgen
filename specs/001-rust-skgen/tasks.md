@@ -96,7 +96,7 @@ Hecho cuando: Tests distinguen skills gestionadas, no gestionadas, con metadatos
 RF: RF-1, RF-2, RF-4.
 Hecho cuando: La creación publica contenido y metadatos completos bajo la ruta requerida y falla sin cambios si el destino ya existe.
 
-- [ ] T25. Implementar reemplazo, renombrado, restauración y bloqueo exclusivo de una skill.
+- [x] T25. Implementar reemplazo, renombrado, restauración y bloqueo exclusivo de una skill.
 RF: RF-2, RF-5, RF-6.
 Hecho cuando: Tests cubren fallo de escritura, conflicto de nombre, renombrado al mismo nombre, restauración de la versión previa y rechazo de una segunda operación simultánea.
 
