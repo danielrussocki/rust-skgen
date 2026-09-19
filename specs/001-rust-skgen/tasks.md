@@ -112,7 +112,7 @@ Hecho cuando: Tests actualizan nombre, URL, alcance, límite, recorrido, máximo
 RF: RF-5, RF-6.
 Hecho cuando: Tests cubren confirmación aceptada, rechazada y sin respuesta; los dos últimos casos no modifican la skill.
 
-- [ ] T29. Implementar la actualización de todas las skills gestionadas y de selecciones dirigidas.
+- [x] T29. Implementar la actualización de todas las skills gestionadas y de selecciones dirigidas.
 RF: RF-5, RF-6, RF-7.
 Hecho cuando: Tests cubren ausencia de skills, selección mixta, continuación tras fallos individuales y conservación de cada skill fallida.
 

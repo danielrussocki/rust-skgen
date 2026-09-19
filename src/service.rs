@@ -10,7 +10,7 @@ use crate::{
     metadata::{ManagedSkillMetadata, content_digest},
     policy::CrawlPolicy,
     render::{render_guide_with_references, render_organized_content},
-    storage::{ManagedSkillStatus, StorageError, TransactionalSkillCreator},
+    storage::{ManagedSkillStatus, SkillLocator, StorageError, TransactionalSkillCreator},
 };
 
 /// Marks a component that orchestrates skill operations.
@@ -276,6 +276,73 @@ impl std::error::Error for UpdateSkillError {
             | Self::RebuildDeclined(_) => None,
         }
     }
+}
+
+/// The per-skill outcome of a batch update.
+#[derive(Debug)]
+pub struct UpdateSkillsOutcome {
+    name: SkillName,
+    result: Result<UpdateSkillResult, UpdateSkillError>,
+}
+
+impl UpdateSkillsOutcome {
+    /// Returns the selected skill name.
+    pub fn name(&self) -> &SkillName {
+        &self.name
+    }
+
+    /// Returns the individual update outcome.
+    pub fn result(&self) -> &Result<UpdateSkillResult, UpdateSkillError> {
+        &self.result
+    }
+}
+
+/// Results collected while updating several skills independently.
+#[derive(Debug)]
+pub struct UpdateSkillsResult {
+    outcomes: Vec<UpdateSkillsOutcome>,
+}
+
+impl UpdateSkillsResult {
+    /// Returns results in selection order, or stable skill-name order when updating all skills.
+    pub fn outcomes(&self) -> &[UpdateSkillsOutcome] {
+        &self.outcomes
+    }
+}
+
+/// Updates every managed skill or an explicitly directed selection.
+///
+/// Each skill is rebuilt independently, so one failure does not prevent later selections.
+pub fn update_skills<F: DocumentFetcher, P: CrawlPolicy>(
+    selection: Option<&[SkillName]>,
+    locator: &SkillLocator,
+    fetcher: &F,
+    policy: &P,
+    publisher: &TransactionalSkillCreator,
+) -> Result<UpdateSkillsResult, StorageError> {
+    let names = match selection {
+        Some(names) => names.to_vec(),
+        None => locator
+            .locate()?
+            .into_iter()
+            .filter(|skill| skill.is_managed())
+            .map(|skill| skill.name().clone())
+            .collect(),
+    };
+    let outcomes = names
+        .into_iter()
+        .map(|name| UpdateSkillsOutcome {
+            result: update_skill(
+                UpdateSkillRequest::new(name.clone()),
+                fetcher,
+                policy,
+                publisher,
+            ),
+            name,
+        })
+        .collect();
+
+    Ok(UpdateSkillsResult { outcomes })
 }
 
 /// Rebuilds one managed skill using its persisted settings plus the requested changes.

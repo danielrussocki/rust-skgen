@@ -15,9 +15,9 @@ use rust_skgen::{
     policy::{CrawlPolicy, RobotsError},
     service::{
         RebuildConfirmation, UpdateSkillError, UpdateSkillRequest, update_skill,
-        update_skill_with_confirmation,
+        update_skill_with_confirmation, update_skills,
     },
-    storage::{METADATA_FILE_NAME, SKILL_FILE_NAME, TransactionalSkillCreator},
+    storage::{METADATA_FILE_NAME, SKILL_FILE_NAME, SkillLocator, TransactionalSkillCreator},
 };
 use url::Url;
 
@@ -53,11 +53,11 @@ struct LocalDocumentationFetcher {
 
 impl DocumentFetcher for LocalDocumentationFetcher {
     fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
-        Ok(FetchedDocument::new(
-            url.clone(),
-            200,
-            self.documents[&url].clone(),
-        ))
+        let Some(body) = self.documents.get(&url) else {
+            return Err(FetchError::RequestLockPoisoned);
+        };
+
+        Ok(FetchedDocument::new(url.clone(), 200, body.clone()))
     }
 }
 
@@ -78,9 +78,129 @@ impl RebuildConfirmation for Confirmation {
 }
 
 fn initial_metadata() -> ManagedSkillMetadata {
-    let source_url = SourceUrl::parse("https://docs.example.test/start").unwrap();
+    metadata_for("https://docs.example.test/start")
+}
+
+fn metadata_for(source: &str) -> ManagedSkillMetadata {
+    metadata_for_content(source, "# Previous skill\n")
+}
+
+fn metadata_for_content(source: &str, content: &str) -> ManagedSkillMetadata {
+    let source_url = SourceUrl::parse(source).unwrap();
     let discovery = DiscoveryConfiguration::default();
-    ManagedSkillMetadata::new(source_url, discovery, content_digest("# Previous skill\n"))
+    ManagedSkillMetadata::new(source_url, discovery, content_digest(content))
+}
+
+#[test]
+fn updating_all_managed_skills_reports_an_empty_result_when_none_exist() {
+    let skills = TemporarySkillsDirectory::new();
+
+    let result = update_skills(
+        None,
+        &SkillLocator::new(skills.path()),
+        &LocalDocumentationFetcher {
+            documents: BTreeMap::new(),
+        },
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    )
+    .unwrap();
+
+    assert!(result.outcomes().is_empty());
+}
+
+#[test]
+fn updates_a_directed_mixed_selection_and_reports_each_result() {
+    let skills = TemporarySkillsDirectory::new();
+    let managed = SkillName::parse("managed-skill").unwrap();
+    let missing = SkillName::parse("missing-skill").unwrap();
+    TransactionalSkillCreator::new(skills.path())
+        .create(&managed, "# Previous skill\n", &initial_metadata())
+        .unwrap();
+    let source_url = SourceUrl::parse("https://docs.example.test/start").unwrap();
+
+    let result = update_skills(
+        Some(&[managed.clone(), missing.clone()]),
+        &SkillLocator::new(skills.path()),
+        &LocalDocumentationFetcher {
+            documents: BTreeMap::from([(
+                source_url.as_url().clone(),
+                "<main><p>Updated documentation.</p></main>".to_owned(),
+            )]),
+        },
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    )
+    .unwrap();
+
+    assert_eq!(result.outcomes().len(), 2);
+    assert_eq!(result.outcomes()[0].name(), &managed);
+    assert!(result.outcomes()[0].result().is_ok());
+    assert_eq!(result.outcomes()[1].name(), &missing);
+    assert!(matches!(
+        result.outcomes()[1].result(),
+        Err(UpdateSkillError::SkillNotFound(name)) if name == &missing
+    ));
+}
+
+#[test]
+fn continues_after_individual_failures_and_preserves_the_failed_skill() {
+    let skills = TemporarySkillsDirectory::new();
+    let failing = SkillName::parse("failing-skill").unwrap();
+    let succeeding = SkillName::parse("succeeding-skill").unwrap();
+    let creator = TransactionalSkillCreator::new(skills.path());
+    creator
+        .create(
+            &failing,
+            "# Failing skill\n",
+            &metadata_for_content("https://docs.example.test/failing", "# Failing skill\n"),
+        )
+        .unwrap();
+    creator
+        .create(
+            &succeeding,
+            "# Succeeding skill\n",
+            &metadata_for_content(
+                "https://docs.example.test/succeeding",
+                "# Succeeding skill\n",
+            ),
+        )
+        .unwrap();
+    let source_url = SourceUrl::parse("https://docs.example.test/succeeding").unwrap();
+
+    let result = update_skills(
+        Some(&[failing.clone(), succeeding.clone()]),
+        &SkillLocator::new(skills.path()),
+        &LocalDocumentationFetcher {
+            documents: BTreeMap::from([(
+                source_url.as_url().clone(),
+                "<main><p>Updated documentation.</p></main>".to_owned(),
+            )]),
+        },
+        &AllowAllPolicy,
+        &creator,
+    )
+    .unwrap();
+
+    assert!(matches!(
+        result.outcomes()[0].result(),
+        Err(UpdateSkillError::Discovery(_))
+    ));
+    assert!(result.outcomes()[1].result().is_ok());
+    assert_eq!(
+        fs::read_to_string(skills.path().join(failing.as_str()).join(SKILL_FILE_NAME)).unwrap(),
+        "# Failing skill\n"
+    );
+    assert_ne!(
+        fs::read_to_string(
+            skills
+                .path()
+                .join(succeeding.as_str())
+                .join(SKILL_FILE_NAME)
+        )
+        .unwrap(),
+        "# Succeeding skill\n"
+    );
 }
 
 #[test]
