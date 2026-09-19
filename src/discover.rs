@@ -1,10 +1,24 @@
 //! Related documentation discovery boundary.
 
 use crate::domain::{AuthorizedHost, SiteBoundary};
+use scraper::{Html, Selector};
 use url::Url;
 
 /// Marks a component that discovers documentation pages.
 pub trait SiteDiscoverer {}
+
+/// Returns link targets found within HTML navigation elements.
+pub fn navigation_links(html: &str) -> Vec<String> {
+    let document = Html::parse_document(html);
+    let Ok(selector) = Selector::parse("nav a[href]") else {
+        return Vec::new();
+    };
+
+    document
+        .select(&selector)
+        .filter_map(|element| element.value().attr("href").map(str::to_owned))
+        .collect()
+}
 
 /// Returns the URL identity used to avoid revisiting the same document.
 pub fn normalize_visit_url(url: &Url) -> Url {

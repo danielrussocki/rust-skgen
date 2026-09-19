@@ -40,7 +40,7 @@ Hecho cuando: Tests cubren esquema, host, puerto, subdominios autorizados y el r
 RF: RF-3.
 Hecho cuando: Tests deterministas aceptan únicamente URLs dentro del prefijo o directorio correspondiente.
 
-- [ ] T11. Implementar la detección de enlaces desde elementos HTML de navegación de la página inicial.
+- [x] T11. Implementar la detección de enlaces desde elementos HTML de navegación de la página inicial.
 RF: RF-3.
 Hecho cuando: Un documento de prueba incluye enlaces dentro y fuera de navegación, y solo se devuelven los primeros.
 
