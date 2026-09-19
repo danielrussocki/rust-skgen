@@ -72,7 +72,7 @@ Hecho cuando: Tests verifican que un nivel no encola descendientes y que el modo
 RF: RF-1, RF-2, RF-3.
 Hecho cuando: Cada fallo de una página conserva intacta la skill previa y no deja una nueva skill parcial.
 
-- [ ] T19. Definir el modelo de metadatos JSON y su serialización validada.
+- [x] T19. Definir el modelo de metadatos JSON y su serialización validada.
 RF: RF-4, RF-5, RF-6.
 Hecho cuando: Tests serializan y deserializan todos los campos de configuración requeridos y rechazan versiones, valores o campos esenciales inválidos.
 
