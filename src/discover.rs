@@ -26,6 +26,8 @@ pub enum DiscoveryError {
     Fetch(FetchError),
     /// The crawl policy prohibited a source document.
     Forbidden(Url),
+    /// A source document responded with a redirect.
+    Redirect(Url),
     /// A source document did not return a successful HTTP status.
     UnexpectedStatus { url: Url, status: u16 },
     /// A source document did not contain extractable documentation.
@@ -38,6 +40,7 @@ impl std::fmt::Display for DiscoveryError {
             Self::Policy(error) => write!(formatter, "failed to evaluate crawl policy: {error}"),
             Self::Fetch(error) => write!(formatter, "failed to retrieve documentation: {error}"),
             Self::Forbidden(url) => write!(formatter, "crawl policy forbids URL: {url}"),
+            Self::Redirect(url) => write!(formatter, "URL redirected: {url}"),
             Self::UnexpectedStatus { url, status } => {
                 write!(
                     formatter,
@@ -57,7 +60,7 @@ impl std::error::Error for DiscoveryError {
             Self::Policy(error) => Some(error),
             Self::Fetch(error) => Some(error),
             Self::Extraction(error) => Some(error),
-            Self::Forbidden(_) | Self::UnexpectedStatus { .. } => None,
+            Self::Forbidden(_) | Self::Redirect(_) | Self::UnexpectedStatus { .. } => None,
         }
     }
 }
@@ -126,6 +129,9 @@ fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
     }
 
     let document = fetcher.fetch(url.clone()).map_err(DiscoveryError::Fetch)?;
+    if (300..400).contains(&document.status()) {
+        return Err(DiscoveryError::Redirect(url));
+    }
     if !(200..300).contains(&document.status()) {
         return Err(DiscoveryError::UnexpectedStatus {
             url,
@@ -302,9 +308,10 @@ fn parent_directory(path: &str) -> &str {
 mod tests {
     use std::{cell::RefCell, collections::BTreeMap};
 
-    use super::discover_all;
+    use super::{DiscoveryError, discover_all};
     use crate::{
         domain::{ContentFormat, DiscoveryConfiguration, DiscoveryScope, TraversalMode},
+        extract::DocumentExtractionError,
         fetch::{DocumentFetcher, FetchError, FetchedDocument},
         policy::{CrawlPolicy, RobotsError},
     };
@@ -340,6 +347,40 @@ mod tests {
     impl CrawlPolicy for AllowAllPolicy {
         fn allows(&self, _url: &Url) -> Result<bool, RobotsError> {
             Ok(true)
+        }
+    }
+
+    struct DenyUrlPolicy {
+        denied_url: Url,
+    }
+
+    impl CrawlPolicy for DenyUrlPolicy {
+        fn allows(&self, url: &Url) -> Result<bool, RobotsError> {
+            Ok(url != &self.denied_url)
+        }
+    }
+
+    struct RedirectingFetcher {
+        source_url: Url,
+        redirect_url: Url,
+        fetched_urls: RefCell<Vec<Url>>,
+    }
+
+    impl DocumentFetcher for RedirectingFetcher {
+        fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
+            self.fetched_urls.borrow_mut().push(url.clone());
+            let (status, body) = if url == self.source_url {
+                (
+                    200,
+                    document("Start") + "<a href=\"/redirect\">Redirect</a>",
+                )
+            } else if url == self.redirect_url {
+                (302, String::new())
+            } else {
+                panic!("unexpected URL requested by test fetcher: {url}");
+            };
+
+            Ok(FetchedDocument::new(url, status, body))
         }
     }
 
@@ -514,5 +555,114 @@ mod tests {
             fetcher.fetched_urls.into_inner().len(),
             DiscoveryConfiguration::DEFAULT_MAX_PAGES
         );
+    }
+
+    #[test]
+    fn redirect_response_aborts_discovery_without_returning_partial_pages() {
+        let source_url = url("/start");
+        let redirect_url = url("/redirect");
+        let fetcher = RedirectingFetcher {
+            source_url: source_url.clone(),
+            redirect_url: redirect_url.clone(),
+            fetched_urls: RefCell::new(Vec::new()),
+        };
+
+        let result = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        );
+
+        assert!(matches!(result, Err(DiscoveryError::Redirect(url)) if url == redirect_url));
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![source_url, redirect_url]
+        );
+    }
+
+    #[test]
+    fn forbidden_page_aborts_discovery_without_returning_partial_pages() {
+        let source_url = url("/start");
+        let forbidden_url = url("/forbidden");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            source_url.clone(),
+            format!("{}<a href=\"/forbidden\">Forbidden</a>", document("Start")),
+        );
+        documents.insert(forbidden_url.clone(), document("Forbidden"));
+        let fetcher = GraphFetcher::new(documents);
+
+        let result = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &DenyUrlPolicy {
+                denied_url: forbidden_url.clone(),
+            },
+        );
+
+        assert!(matches!(result, Err(DiscoveryError::Forbidden(url)) if url == forbidden_url));
+        assert_eq!(fetcher.fetched_urls.into_inner(), vec![source_url]);
+    }
+
+    #[test]
+    fn failed_page_extraction_aborts_discovery_without_returning_partial_pages() {
+        let source_url = url("/start");
+        let invalid_url = url("/invalid");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            source_url.clone(),
+            format!("{}<a href=\"/invalid\">Invalid</a>", document("Start")),
+        );
+        documents.insert(
+            invalid_url.clone(),
+            "<html><body>Invalid</body></html>".to_owned(),
+        );
+        let fetcher = GraphFetcher::new(documents);
+
+        let result = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        );
+
+        assert!(matches!(
+            result,
+            Err(DiscoveryError::Extraction(
+                DocumentExtractionError::NoDocumentationContent
+            ))
+        ));
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![source_url, invalid_url]
+        );
+    }
+
+    #[test]
+    fn source_without_documentation_aborts_discovery_without_any_valid_pages() {
+        let source_url = url("/start");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            source_url.clone(),
+            "<html><body>Empty</body></html>".to_owned(),
+        );
+        let fetcher = GraphFetcher::new(documents);
+
+        let result = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        );
+
+        assert!(matches!(
+            result,
+            Err(DiscoveryError::Extraction(
+                DocumentExtractionError::NoDocumentationContent
+            ))
+        ));
+        assert_eq!(fetcher.fetched_urls.into_inner(), vec![source_url]);
     }
 }

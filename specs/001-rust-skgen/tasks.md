@@ -68,7 +68,7 @@ Hecho cuando: Tests con un grafo local verifican recorrido hasta agotamiento, or
 RF: RF-3, RF-4.
 Hecho cuando: Tests verifican que un nivel no encola descendientes y que el modo limitado cuenta la inicial, usa 100 por defecto y publica al alcanzar el máximo.
 
-- [ ] T18. Integrar errores de redirección, acceso prohibido, extracción fallida y ausencia de páginas válidas como fallo atómico de una skill.
+- [x] T18. Integrar errores de redirección, acceso prohibido, extracción fallida y ausencia de páginas válidas como fallo atómico de una skill.
 RF: RF-1, RF-2, RF-3.
 Hecho cuando: Cada fallo de una página conserva intacta la skill previa y no deja una nueva skill parcial.
 
