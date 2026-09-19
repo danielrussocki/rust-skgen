@@ -80,7 +80,7 @@ Hecho cuando: Tests serializan y deserializan todos los campos de configuración
 RF: RF-4, RF-6.
 Hecho cuando: Tests detectan una modificación manual del contenido y aceptan contenido sin cambios.
 
-- [ ] T21. Implementar el renderizado determinista del formato de guía con referencias.
+- [x] T21. Implementar el renderizado determinista del formato de guía con referencias.
 RF: RF-4.
 Hecho cuando: El resultado contiene objetivo e instrucciones derivados de contenido extraído, contenido ordenado y URL atribuida de cada fuente.
 
