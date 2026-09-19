@@ -116,10 +116,16 @@ pub fn create_skill<F: DocumentFetcher, P: CrawlPolicy>(
     Ok(CreateSkillResult { name: request.name })
 }
 
-/// Validated partial configuration changes for one managed skill.
+/// Update request for a managed skill selected by its current name.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpdateSkillRequest {
     current_name: SkillName,
+    changes: UpdateSkillChanges,
+}
+
+/// Validated partial configuration changes that can be applied to one managed skill.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct UpdateSkillChanges {
     new_name: Option<SkillName>,
     source_url: Option<SourceUrl>,
     scope: Option<DiscoveryScope>,
@@ -135,17 +141,12 @@ impl UpdateSkillRequest {
     pub fn new(current_name: SkillName) -> Self {
         Self {
             current_name,
-            new_name: None,
-            source_url: None,
-            scope: None,
-            site_boundary: None,
-            authorized_subdomains: None,
-            traversal_mode: None,
-            max_pages: None,
-            content_format: None,
+            changes: UpdateSkillChanges::default(),
         }
     }
+}
 
+impl UpdateSkillChanges {
     /// Changes the published skill name.
     pub fn with_name(mut self, name: SkillName) -> Self {
         self.new_name = Some(name);
@@ -194,6 +195,72 @@ impl UpdateSkillRequest {
     /// Changes the generated content format.
     pub fn with_content_format(mut self, content_format: ContentFormat) -> Self {
         self.content_format = Some(content_format);
+        self
+    }
+
+    fn has_changes(&self) -> bool {
+        self.new_name.is_some()
+            || self.source_url.is_some()
+            || self.scope.is_some()
+            || self.site_boundary.is_some()
+            || self.authorized_subdomains.is_some()
+            || self.traversal_mode.is_some()
+            || self.max_pages.is_some()
+            || self.content_format.is_some()
+    }
+}
+
+impl UpdateSkillRequest {
+    /// Changes the published skill name.
+    pub fn with_name(mut self, name: SkillName) -> Self {
+        self.changes = self.changes.with_name(name);
+        self
+    }
+
+    /// Changes the documentation source URL.
+    pub fn with_source_url(mut self, source_url: SourceUrl) -> Self {
+        self.changes = self.changes.with_source_url(source_url);
+        self
+    }
+
+    /// Changes the discovery scope.
+    pub fn with_scope(mut self, scope: DiscoveryScope) -> Self {
+        self.changes = self.changes.with_scope(scope);
+        self
+    }
+
+    /// Changes the same-site boundary.
+    pub fn with_site_boundary(mut self, site_boundary: SiteBoundary) -> Self {
+        self.changes = self.changes.with_site_boundary(site_boundary);
+        self
+    }
+
+    /// Replaces the explicitly authorized base-domain subdomains.
+    pub fn with_authorized_subdomains(
+        mut self,
+        authorized_subdomains: Vec<AuthorizedHost>,
+    ) -> Self {
+        self.changes = self
+            .changes
+            .with_authorized_subdomains(authorized_subdomains);
+        self
+    }
+
+    /// Changes the traversal mode.
+    pub fn with_traversal_mode(mut self, traversal_mode: TraversalMode) -> Self {
+        self.changes = self.changes.with_traversal_mode(traversal_mode);
+        self
+    }
+
+    /// Changes the maximum page count for limited traversal.
+    pub fn with_max_pages(mut self, max_pages: usize) -> Self {
+        self.changes = self.changes.with_max_pages(max_pages);
+        self
+    }
+
+    /// Changes the generated content format.
+    pub fn with_content_format(mut self, content_format: ContentFormat) -> Self {
+        self.changes = self.changes.with_content_format(content_format);
         self
     }
 }
@@ -310,6 +377,28 @@ impl UpdateSkillsResult {
     }
 }
 
+/// Error returned before a directed batch update can start.
+#[derive(Debug)]
+pub enum UpdateSkillsError {
+    /// Configuration changes are only valid when exactly one skill is selected.
+    ConfigurationChangesRequireSingleSelection,
+}
+
+impl std::fmt::Display for UpdateSkillsError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ConfigurationChangesRequireSingleSelection => {
+                write!(
+                    formatter,
+                    "configuration changes require a single selected skill"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for UpdateSkillsError {}
+
 /// Updates every managed skill or an explicitly directed selection.
 ///
 /// Each skill is rebuilt independently, so one failure does not prevent later selections.
@@ -334,6 +423,40 @@ pub fn update_skills<F: DocumentFetcher, P: CrawlPolicy>(
         .map(|name| UpdateSkillsOutcome {
             result: update_skill(
                 UpdateSkillRequest::new(name.clone()),
+                fetcher,
+                policy,
+                publisher,
+            ),
+            name,
+        })
+        .collect();
+
+    Ok(UpdateSkillsResult { outcomes })
+}
+
+/// Updates a directed selection, applying configuration changes only when one skill is selected.
+///
+/// The validation happens before any selected skill is read, fetched, or published.
+pub fn update_skills_with_changes<F: DocumentFetcher, P: CrawlPolicy>(
+    selection: &[SkillName],
+    changes: UpdateSkillChanges,
+    fetcher: &F,
+    policy: &P,
+    publisher: &TransactionalSkillCreator,
+) -> Result<UpdateSkillsResult, UpdateSkillsError> {
+    if selection.len() > 1 && changes.has_changes() {
+        return Err(UpdateSkillsError::ConfigurationChangesRequireSingleSelection);
+    }
+
+    let outcomes = selection
+        .iter()
+        .cloned()
+        .map(|name| UpdateSkillsOutcome {
+            result: update_skill(
+                UpdateSkillRequest {
+                    current_name: name.clone(),
+                    changes: changes.clone(),
+                },
                 fetcher,
                 policy,
                 publisher,
@@ -399,11 +522,13 @@ fn update_skill_inner<F: DocumentFetcher, P: CrawlPolicy>(
         }
         None => return Err(UpdateSkillError::SkillNotFound(request.current_name)),
     };
-    let discovery = updated_discovery_configuration(&metadata, &request)?;
+    let discovery = updated_discovery_configuration(&metadata, &request.changes)?;
     let source_url = request
+        .changes
         .source_url
         .unwrap_or_else(|| metadata.source_url().clone());
     let new_name = request
+        .changes
         .new_name
         .unwrap_or_else(|| request.current_name.clone());
     let pages = discover_all(source_url.as_url().clone(), &discovery, fetcher, policy)
@@ -433,12 +558,12 @@ fn require_rebuild_confirmation(
 
 fn updated_discovery_configuration(
     metadata: &ManagedSkillMetadata,
-    request: &UpdateSkillRequest,
+    changes: &UpdateSkillChanges,
 ) -> Result<DiscoveryConfiguration, UpdateSkillError> {
     let previous = metadata.discovery();
-    let scope = request.scope.unwrap_or_else(|| previous.scope());
+    let scope = changes.scope.unwrap_or_else(|| previous.scope());
     let site_boundary = (scope == DiscoveryScope::SameSite).then(|| {
-        request.site_boundary.unwrap_or_else(|| {
+        changes.site_boundary.unwrap_or_else(|| {
             if previous.scope() == DiscoveryScope::SameSite {
                 previous.site_boundary()
             } else {
@@ -447,7 +572,7 @@ fn updated_discovery_configuration(
         })
     });
     let authorized_subdomains = if site_boundary == Some(SiteBoundary::BaseDomain) {
-        request.authorized_subdomains.clone().unwrap_or_else(|| {
+        changes.authorized_subdomains.clone().unwrap_or_else(|| {
             if previous.scope() == DiscoveryScope::SameSite {
                 previous.authorized_subdomains().to_vec()
             } else {
@@ -457,15 +582,15 @@ fn updated_discovery_configuration(
     } else {
         Vec::new()
     };
-    let traversal_mode = request
+    let traversal_mode = changes
         .traversal_mode
         .unwrap_or_else(|| previous.traversal_mode());
     let max_pages = if traversal_mode == TraversalMode::Limited {
-        request.max_pages.or_else(|| previous.max_pages())
+        changes.max_pages.or_else(|| previous.max_pages())
     } else {
-        request.max_pages
+        changes.max_pages
     };
-    let content_format = request
+    let content_format = changes
         .content_format
         .unwrap_or_else(|| previous.content_format());
 

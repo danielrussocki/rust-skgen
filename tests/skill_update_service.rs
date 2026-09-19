@@ -14,8 +14,9 @@ use rust_skgen::{
     metadata::{ManagedSkillMetadata, content_digest},
     policy::{CrawlPolicy, RobotsError},
     service::{
-        RebuildConfirmation, UpdateSkillError, UpdateSkillRequest, update_skill,
-        update_skill_with_confirmation, update_skills,
+        RebuildConfirmation, UpdateSkillChanges, UpdateSkillError, UpdateSkillRequest,
+        UpdateSkillsError, update_skill, update_skill_with_confirmation, update_skills,
+        update_skills_with_changes,
     },
     storage::{METADATA_FILE_NAME, SKILL_FILE_NAME, SkillLocator, TransactionalSkillCreator},
 };
@@ -141,6 +142,43 @@ fn updates_a_directed_mixed_selection_and_reports_each_result() {
         result.outcomes()[1].result(),
         Err(UpdateSkillError::SkillNotFound(name)) if name == &missing
     ));
+}
+
+#[test]
+fn rejects_configuration_changes_for_multiple_selected_skills_without_modifying_them() {
+    let skills = TemporarySkillsDirectory::new();
+    let first = SkillName::parse("first-skill").unwrap();
+    let second = SkillName::parse("second-skill").unwrap();
+    let creator = TransactionalSkillCreator::new(skills.path());
+    creator
+        .create(&first, "# First skill\n", &initial_metadata())
+        .unwrap();
+    creator
+        .create(&second, "# Second skill\n", &initial_metadata())
+        .unwrap();
+
+    let result = update_skills_with_changes(
+        &[first.clone(), second.clone()],
+        UpdateSkillChanges::default().with_content_format(ContentFormat::OrganizedContent),
+        &LocalDocumentationFetcher {
+            documents: BTreeMap::new(),
+        },
+        &AllowAllPolicy,
+        &creator,
+    );
+
+    assert!(matches!(
+        result,
+        Err(UpdateSkillsError::ConfigurationChangesRequireSingleSelection)
+    ));
+    assert_eq!(
+        fs::read_to_string(skills.path().join(first.as_str()).join(SKILL_FILE_NAME)).unwrap(),
+        "# First skill\n"
+    );
+    assert_eq!(
+        fs::read_to_string(skills.path().join(second.as_str()).join(SKILL_FILE_NAME)).unwrap(),
+        "# Second skill\n"
+    );
 }
 
 #[test]

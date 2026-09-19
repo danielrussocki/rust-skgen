@@ -116,7 +116,7 @@ Hecho cuando: Tests cubren confirmación aceptada, rechazada y sin respuesta; lo
 RF: RF-5, RF-6, RF-7.
 Hecho cuando: Tests cubren ausencia de skills, selección mixta, continuación tras fallos individuales y conservación de cada skill fallida.
 
-- [ ] T30. Rechazar cambios de configuración cuando la actualización dirigida selecciona varias skills.
+- [x] T30. Rechazar cambios de configuración cuando la actualización dirigida selecciona varias skills.
 RF: RF-6, RF-7.
 Hecho cuando: Un test verifica que la operación se rechaza antes de modificar cualquier skill.
 
