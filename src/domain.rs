@@ -108,6 +108,10 @@ impl SourceUrl {
             });
         }
 
+        if url.host_str().is_none() {
+            return Err(SourceUrlError::MissingHost);
+        }
+
         Ok(Self(url))
     }
 
@@ -129,6 +133,8 @@ pub enum SourceUrlError {
         /// The unsupported URL scheme.
         scheme: String,
     },
+    /// The HTTP(S) URL does not identify a host.
+    MissingHost,
 }
 
 impl std::fmt::Display for SourceUrlError {
@@ -138,6 +144,7 @@ impl std::fmt::Display for SourceUrlError {
             Self::UnsupportedScheme { scheme } => {
                 write!(formatter, "unsupported source URL scheme: {scheme}")
             }
+            Self::MissingHost => formatter.write_str("source URL must include a host"),
         }
     }
 }
@@ -146,7 +153,7 @@ impl std::error::Error for SourceUrlError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidUrl(error) => Some(error),
-            Self::UnsupportedScheme { .. } => None,
+            Self::UnsupportedScheme { .. } | Self::MissingHost => None,
         }
     }
 }

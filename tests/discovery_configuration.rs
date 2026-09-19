@@ -15,6 +15,13 @@ fn accepts_http_and_https_source_urls() {
 }
 
 #[test]
+fn rejects_http_and_https_source_urls_without_a_host() {
+    for value in ["http://", "https://"] {
+        assert!(SourceUrl::parse(value).is_err());
+    }
+}
+
+#[test]
 fn rejects_malformed_source_urls() {
     assert!(matches!(
         SourceUrl::parse("not a URL"),

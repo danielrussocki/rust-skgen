@@ -206,12 +206,13 @@ pub fn normalize_visit_url(url: &Url) -> Url {
 
 /// Returns whether a candidate URL is the source path or a descendant of it.
 pub fn is_within_path_prefix(source: &Url, candidate: &Url) -> bool {
-    path_is_within_directory(candidate.path(), source.path())
+    has_same_origin(source, candidate) && path_is_within_directory(candidate.path(), source.path())
 }
 
 /// Returns whether a candidate URL belongs to the directory containing the source URL.
 pub fn is_within_parent_directory(source: &Url, candidate: &Url) -> bool {
-    path_is_within_directory(candidate.path(), parent_directory(source.path()))
+    has_same_origin(source, candidate)
+        && path_is_within_directory(candidate.path(), parent_directory(source.path()))
 }
 
 /// Returns whether a candidate URL belongs to the configured site boundary.
@@ -224,9 +225,7 @@ pub fn is_within_site_boundary(
 ) -> bool {
     match boundary {
         SiteBoundary::ExactHost => has_same_host_and_port(source, candidate),
-        SiteBoundary::SameOrigin => {
-            source.scheme() == candidate.scheme() && has_same_host_and_port(source, candidate)
-        }
+        SiteBoundary::SameOrigin => has_same_origin(source, candidate),
         SiteBoundary::BaseDomain => {
             has_same_host(source, candidate)
                 || (linked_from_included_page
@@ -240,6 +239,10 @@ pub fn is_within_site_boundary(
 fn has_same_host_and_port(source: &Url, candidate: &Url) -> bool {
     has_same_host(source, candidate)
         && source.port_or_known_default() == candidate.port_or_known_default()
+}
+
+fn has_same_origin(source: &Url, candidate: &Url) -> bool {
+    source.scheme() == candidate.scheme() && has_same_host_and_port(source, candidate)
 }
 
 fn has_same_host(source: &Url, candidate: &Url) -> bool {

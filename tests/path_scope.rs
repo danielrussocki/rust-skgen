@@ -43,3 +43,18 @@ fn root_parent_directory_includes_descendants_of_the_root_directory() {
     assert!(is_within_parent_directory(&source, &root_page));
     assert!(is_within_parent_directory(&source, &nested_page));
 }
+
+#[test]
+fn path_scopes_reject_matching_paths_from_a_different_origin() {
+    let source = parse_url("https://docs.example.com:8443/reference/components/button");
+    let different_host =
+        parse_url("https://other.example.com:8443/reference/components/button/api");
+    let different_scheme =
+        parse_url("http://docs.example.com:8443/reference/components/button/api");
+    let different_port = parse_url("https://docs.example.com/reference/components/button/api");
+
+    for candidate in [different_host, different_scheme, different_port] {
+        assert!(!is_within_path_prefix(&source, &candidate));
+        assert!(!is_within_parent_directory(&source, &candidate));
+    }
+}

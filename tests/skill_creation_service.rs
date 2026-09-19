@@ -9,7 +9,7 @@ use rust_skgen::{
     domain::{DiscoveryConfiguration, SkillName, SourceUrl},
     fetch::{DocumentFetcher, FetchError, FetchedDocument},
     metadata::ManagedSkillMetadata,
-    policy::{CrawlPolicy, RobotsError},
+    policy::{AccessPolicy, CombinedCrawlPolicy, CrawlPolicy, RobotsError},
     service::{CreateSkillRequest, create_skill},
     storage::{METADATA_FILE_NAME, SKILL_FILE_NAME, TransactionalSkillCreator},
 };
@@ -63,6 +63,14 @@ impl CrawlPolicy for AllowAllPolicy {
     }
 }
 
+struct DenyRestrictedAccess;
+
+impl AccessPolicy for DenyRestrictedAccess {
+    fn allows(&self, url: &Url) -> bool {
+        url.path() != "/restricted"
+    }
+}
+
 #[test]
 fn creates_a_skill_from_local_documentation_with_attributed_sources() {
     let skills = TemporarySkillsDirectory::new();
@@ -107,4 +115,34 @@ fn creates_a_skill_from_local_documentation_with_attributed_sources() {
     .unwrap();
     assert_eq!(metadata.source_url().as_url(), &source_url);
     assert!(metadata.has_matching_content_digest(&content));
+}
+
+#[test]
+fn does_not_publish_a_skill_when_access_conditions_forbid_a_related_page() {
+    let skills = TemporarySkillsDirectory::new();
+    let source_url = Url::parse("https://docs.example.test/start").unwrap();
+    let name = SkillName::parse("restricted-docs").unwrap();
+    let fetcher = LocalDocumentationFetcher {
+        documents: BTreeMap::from([(
+            source_url.clone(),
+            "<main><p>Start documentation.</p><a href=\"/restricted\">Restricted</a></main>"
+                .to_owned(),
+        )]),
+    };
+    let request = CreateSkillRequest::new(
+        name.clone(),
+        SourceUrl::parse(source_url.as_str()).unwrap(),
+        DiscoveryConfiguration::default(),
+    );
+    let policy = CombinedCrawlPolicy::new(AllowAllPolicy, DenyRestrictedAccess);
+
+    let result = create_skill(
+        request,
+        &fetcher,
+        &policy,
+        &TransactionalSkillCreator::new(skills.path()),
+    );
+
+    assert!(result.is_err());
+    assert!(!skills.path().join(name.as_str()).exists());
 }

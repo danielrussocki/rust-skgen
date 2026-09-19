@@ -9,6 +9,34 @@ pub trait CrawlPolicy {
     fn allows(&self, url: &Url) -> Result<bool, RobotsError>;
 }
 
+/// Evaluates access conditions applicable to a documentation URL.
+pub trait AccessPolicy {
+    /// Returns whether the URL is permitted by the applicable access conditions.
+    fn allows(&self, url: &Url) -> bool;
+}
+
+/// Requires both robots.txt and applicable access conditions to permit a URL.
+pub struct CombinedCrawlPolicy<R, A> {
+    robots_policy: R,
+    access_policy: A,
+}
+
+impl<R, A> CombinedCrawlPolicy<R, A> {
+    /// Combines a robots.txt policy with applicable access conditions.
+    pub fn new(robots_policy: R, access_policy: A) -> Self {
+        Self {
+            robots_policy,
+            access_policy,
+        }
+    }
+}
+
+impl<R: CrawlPolicy, A: AccessPolicy> CrawlPolicy for CombinedCrawlPolicy<R, A> {
+    fn allows(&self, url: &Url) -> Result<bool, RobotsError> {
+        Ok(self.robots_policy.allows(url)? && self.access_policy.allows(url))
+    }
+}
+
 /// Error returned while retrieving or evaluating a robots policy.
 #[derive(Debug)]
 pub enum RobotsError {

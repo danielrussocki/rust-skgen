@@ -131,3 +131,75 @@ Hecho cuando: Tests de CLI verifican salida estándar, salida de error y código
 - [x] T33. Ejecutar la suite completa y corregir incumplimientos de formato, lint y pruebas.
 RF: RF-1 a RF-7.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.
+
+- [x] T34. Reforzar la validación de URL de origen para exigir un host HTTP(S) válido.
+RF: RF-1.
+Hecho cuando: Tests deterministas rechazan URLs HTTP(S) sin host y aceptan URLs HTTP(S) con host válido.
+
+- [x] T35. Restringir los alcances de prefijo de ruta y directorio padre al esquema, host y puerto de la URL de origen.
+RF: RF-3.
+Hecho cuando: Tests deterministas rechazan para ambos alcances una URL de otro host, esquema o puerto aunque su ruta coincida.
+
+- [x] T36. Incorporar una política de acceso aplicable, además de `robots.txt`, en el descubrimiento.
+RF: RF-3.
+Hecho cuando: Un doble de política que prohíbe una URL hace fallar la operación sin publicar una skill nueva ni alterar una existente.
+
+- [ ] T37. Rechazar respuestas que no sean HTML apto para extracción documental.
+RF: RF-1, RF-3.
+Hecho cuando: Un servidor local que devuelve una respuesta 2xx con contenido no HTML provoca un fallo atómico de creación y actualización.
+
+- [ ] T38. Derivar de forma determinista el objetivo y las instrucciones de la guía exclusivamente de las páginas extraídas.
+RF: RF-4.
+Hecho cuando: Un test de renderizado verifica que `Objective` e `Instructions` no están vacíos, proceden de contenido de prueba extraído y no incluyen texto ajeno a las fuentes.
+
+- [ ] T39. Validar estructuralmente la huella `content_digest` de los metadatos.
+RF: RF-4, RF-6.
+Hecho cuando: Tests de deserialización rechazan huellas vacías, prefijos distintos de `sha256:` y valores que no contienen exactamente 64 dígitos hexadecimales.
+
+- [ ] T40. Permitir actualizar una skill con metadatos válidos aunque su contenido gestionado haya sido editado manualmente.
+RF: RF-5, RF-6.
+Hecho cuando: Un test de servicio modifica manualmente una skill con metadatos válidos y verifica que una actualización correcta reemplaza el contenido y conserva metadatos válidos.
+
+- [ ] T41. Definir y probar la reconstrucción confirmada de metadatos ausentes o inválidos.
+RF: RF-6.
+Hecho cuando: Tests deterministas especifican la configuración usada al aceptar la reconstrucción y verifican que el rechazo o la ausencia de respuesta no modifica la skill.
+
+- [ ] T42. Implementar la reconstrucción confirmada de metadatos ausentes o inválidos según la configuración definida.
+RF: RF-6.
+Hecho cuando: Un test de servicio confirma la reconstrucción para metadatos ausentes y otro para metadatos inválidos; ambos actualizan la skill y escriben metadatos válidos.
+
+- [ ] T43. Restaurar la versión previa si falla cualquier fase de reemplazo antes de confirmar la actualización.
+RF: RF-2, RF-7.
+Hecho cuando: Un doble de almacenamiento que falla al limpiar el backup verifica que la operación no informa un fallo después de publicar contenido nuevo, o que restaura íntegramente la versión previa.
+
+- [ ] T44. Añadir al resultado de CLI el fallo individual de creación y su código de salida.
+RF: RF-7.
+Hecho cuando: Tests de salida verifican que un fallo de creación produce `Failed skill: <name>: <reason>` en error estándar y código 1.
+
+- [ ] T45. Crear el ejecutable Cargo y el bootstrap que compone CLI, servicios y almacenamiento desde el directorio actual.
+RF: RF-1, RF-5, RF-6, RF-7.
+Hecho cuando: `cargo run -- --help` muestra los comandos `create` y `update`, y un test de integración puede ejecutar el binario.
+
+- [ ] T46. Resolver el directorio de skills como `.agents/skills` relativo al directorio de trabajo del proceso.
+RF: RF-1.
+Hecho cuando: Un test de integración ejecuta `create` en un directorio temporal y verifica que la skill se publica únicamente bajo `.agents/skills/<skill-name>`.
+
+- [ ] T47. Conectar el comando `create` del ejecutable al servicio y a los resultados de salida.
+RF: RF-1, RF-2, RF-3, RF-4, RF-7.
+Hecho cuando: Tests de integración locales verifican creación exitosa con fuentes atribuidas, rechazo de destino existente y ausencia de directorios parciales ante un fallo de descubrimiento.
+
+- [ ] T48. Conectar el comando `update` del ejecutable a actualizaciones sin argumentos, dirigidas y con cambios individuales.
+RF: RF-5, RF-6, RF-7.
+Hecho cuando: Tests de integración ejecutan actualizaciones sin nombres, selecciones mixtas y una actualización individual configurada, verificando los resultados por skill y la persistencia de configuración.
+
+- [ ] T49. Implementar la confirmación interactiva de reconstrucción de metadatos en el ejecutable.
+RF: RF-6.
+Hecho cuando: Tests de integración con entrada simulada verifican que `y` reconstruye y actualiza, mientras que `n` y EOF no modifican la skill.
+
+- [ ] T50. Verificar de extremo a extremo los códigos de salida y los canales de salida del ejecutable.
+RF: RF-7.
+Hecho cuando: Tests de integración verifican código 0 para éxito, 1 para uno o más fallos de skill y 2 para argumentos inválidos, con los mensajes en los canales especificados.
+
+- [ ] T51. Ejecutar la matriz completa de pruebas de requisitos y cerrar los huecos de cobertura restantes.
+RF: RF-1 a RF-7.
+Hecho cuando: Cada requisito funcional y caso límite de la especificación tiene una prueba determinista identificable y `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.
