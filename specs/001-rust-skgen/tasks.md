@@ -32,7 +32,7 @@ Hecho cuando: Tests cubren valores predeterminados, máximo positivo, límite de
 RF: RF-3.
 Hecho cuando: Tests prueban que URLs que solo difieren por consulta o fragmento se consideran iguales.
 
-- [ ] T09. Implementar las reglas de pertenencia de URL para host exacto, mismo origen y dominio base.
+- [x] T09. Implementar las reglas de pertenencia de URL para host exacto, mismo origen y dominio base.
 RF: RF-3.
 Hecho cuando: Tests cubren esquema, host, puerto, subdominios autorizados y el requisito de enlace previo.
 

@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 clap = { version = "4.5.32", features = ["derive"] }
+psl = "2.1.184"
 reqwest = { version = "0.12.12", default-features = false, features = ["blocking", "rustls-tls"] }
 scraper = "0.24.0"
 serde = { version = "1.0.219", features = ["derive"] }

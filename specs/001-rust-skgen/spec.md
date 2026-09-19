@@ -99,6 +99,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 
 - Se justifican dependencias para solicitudes HTTP(S) con control de redirecciones, cabeceras, tiempos de espera y reintentos, necesarias para obtener documentación pública de forma controlada. Cubre RF-1 y RF-3.
 - Se justifican dependencias para analizar y normalizar URLs, resolver enlaces relativos y aplicar los límites de descubrimiento. Cubre RF-1 y RF-3.
+- Se justifican dependencias para identificar dominios registrables mediante una lista de sufijos públicos al aplicar el límite de mismo dominio base. Cubre RF-3.
 - Se justifican dependencias para analizar HTML de forma estructurada y extraer enlaces, navegación y contenido documental sin interpretar HTML como texto no estructurado. Cubre RF-3 y RF-4.
 - Se justifican dependencias para serializar y validar los metadatos JSON que identifican una skill gestionada y conservan su configuración de actualización. Cubre RF-4, RF-5 y RF-6.
 - Se justifican dependencias para calcular y verificar una huella criptográfica del contenido gestionado y detectar modificaciones antes de reconstruir metadatos o actualizar la skill. Cubre RF-4 y RF-6.
