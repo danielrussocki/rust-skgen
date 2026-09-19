@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use crate::{
     domain::{
         AuthorizedHost, DiscoveryConfiguration, DiscoveryScope, DocumentationPage, SiteBoundary,
+        TraversalMode,
     },
     extract::{DocumentExtractionError, extract_document, extract_links},
     fetch::{DocumentFetcher, FetchError},
@@ -61,7 +62,7 @@ impl std::error::Error for DiscoveryError {
     }
 }
 
-/// Discovers all in-scope documentation pages using deterministic URL order.
+/// Discovers in-scope documentation pages using deterministic URL order.
 pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
     source_url: Url,
     configuration: &DiscoveryConfiguration,
@@ -78,6 +79,10 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
     let mut pages = vec![source_page];
 
     while let Some(candidate) = queue.pop_first() {
+        if maximum_reached(configuration, pages.len()) {
+            break;
+        }
+
         let candidate = normalize_visit_url(&candidate);
         if !visited.insert(candidate.clone())
             || !is_in_scope(&source_url, &candidate, configuration, &navigation_urls)
@@ -88,16 +93,27 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
         let document = fetch_document(candidate.clone(), fetcher, policy)?;
         let page = extract_document(candidate.clone(), document.body())
             .map_err(DiscoveryError::Extraction)?;
-        queue.extend(
-            extract_links(&candidate, document.body())
-                .into_iter()
-                .map(|url| normalize_visit_url(&url)),
-        );
         pages.push(page);
+        if configuration.traversal_mode() != TraversalMode::OneLevel
+            && !maximum_reached(configuration, pages.len())
+        {
+            queue.extend(
+                extract_links(&candidate, document.body())
+                    .into_iter()
+                    .map(|url| normalize_visit_url(&url)),
+            );
+        }
     }
 
     pages.sort_by_key(|page| normalize_visit_url(page.source_url()).to_string());
     Ok(pages)
+}
+
+fn maximum_reached(configuration: &DiscoveryConfiguration, page_count: usize) -> bool {
+    configuration.traversal_mode() == TraversalMode::Limited
+        && configuration
+            .max_pages()
+            .is_some_and(|maximum| page_count >= maximum)
 }
 
 fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
@@ -288,7 +304,7 @@ mod tests {
 
     use super::discover_all;
     use crate::{
-        domain::DiscoveryConfiguration,
+        domain::{ContentFormat, DiscoveryConfiguration, DiscoveryScope, TraversalMode},
         fetch::{DocumentFetcher, FetchError, FetchedDocument},
         policy::{CrawlPolicy, RobotsError},
     };
@@ -335,6 +351,21 @@ mod tests {
         format!("<main><p>{body}</p></main>")
     }
 
+    fn configuration(
+        traversal_mode: TraversalMode,
+        max_pages: Option<usize>,
+    ) -> DiscoveryConfiguration {
+        DiscoveryConfiguration::new(
+            DiscoveryScope::SameSite,
+            None,
+            Vec::new(),
+            traversal_mode,
+            max_pages,
+            ContentFormat::GuideWithReferences,
+        )
+        .expect("test discovery configuration must be valid")
+    }
+
     #[test]
     fn traverses_all_in_scope_pages_in_canonical_order_without_duplicates() {
         let source_url = url("/start");
@@ -372,6 +403,116 @@ mod tests {
         assert_eq!(
             fetcher.fetched_urls.into_inner(),
             vec![url("/start"), url("/a"), url("/b"), url("/z")]
+        );
+    }
+
+    #[test]
+    fn one_level_traversal_does_not_enqueue_descendants() {
+        let source_url = url("/start");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            source_url.clone(),
+            format!(
+                "{}<a href=\"/a\">A</a><a href=\"/b\">B</a>",
+                document("Start")
+            ),
+        );
+        documents.insert(
+            url("/a"),
+            format!("{}<a href=\"/descendant\">Descendant</a>", document("A")),
+        );
+        documents.insert(url("/b"), document("B"));
+        let fetcher = GraphFetcher::new(documents);
+
+        let pages = discover_all(
+            source_url.clone(),
+            &configuration(TraversalMode::OneLevel, None),
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("the direct documentation links should be discovered");
+
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.source_url().clone())
+                .collect::<Vec<_>>(),
+            vec![url("/a"), url("/b"), source_url]
+        );
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![url("/start"), url("/a"), url("/b")]
+        );
+    }
+
+    #[test]
+    fn limited_traversal_counts_the_source_page_and_stops_at_its_maximum() {
+        let source_url = url("/start");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            source_url.clone(),
+            format!(
+                "{}<a href=\"/a\">A</a><a href=\"/b\">B</a>",
+                document("Start")
+            ),
+        );
+        documents.insert(url("/a"), document("A"));
+        documents.insert(url("/b"), document("B"));
+        let fetcher = GraphFetcher::new(documents);
+
+        let pages = discover_all(
+            source_url.clone(),
+            &configuration(TraversalMode::Limited, Some(2)),
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("reaching the maximum should still return discovered pages");
+
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.source_url().clone())
+                .collect::<Vec<_>>(),
+            vec![url("/a"), source_url]
+        );
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![url("/start"), url("/a")]
+        );
+    }
+
+    #[test]
+    fn limited_traversal_uses_the_default_maximum_of_one_hundred_pages() {
+        let source_url = url("/start");
+        let mut documents = BTreeMap::new();
+        let mut links = String::new();
+        for index in 1..=100 {
+            let path = format!("/page-{index:03}");
+            links.push_str(&format!("<a href=\"{path}\">Page {index}</a>"));
+            documents.insert(url(&path), document(&format!("Page {index}")));
+        }
+        documents.insert(
+            source_url.clone(),
+            format!("{}{}", document("Start"), links),
+        );
+        let fetcher = GraphFetcher::new(documents);
+
+        let pages = discover_all(
+            source_url.clone(),
+            &configuration(TraversalMode::Limited, None),
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("the default maximum should publish the discovered pages");
+
+        assert_eq!(pages.len(), DiscoveryConfiguration::DEFAULT_MAX_PAGES);
+        assert_eq!(
+            pages.last().map(|page| page.source_url()),
+            Some(&source_url)
+        );
+        assert_eq!(
+            fetcher.fetched_urls.into_inner().len(),
+            DiscoveryConfiguration::DEFAULT_MAX_PAGES
         );
     }
 }

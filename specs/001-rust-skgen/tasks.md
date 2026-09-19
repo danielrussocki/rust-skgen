@@ -64,7 +64,7 @@ Hecho cuando: Un HTML de prueba produce una página documental con contenido y U
 RF: RF-3, RF-4.
 Hecho cuando: Tests con un grafo local verifican recorrido hasta agotamiento, orden estable, inclusión obligatoria de la página inicial y eliminación de duplicados.
 
-- [ ] T17. Implementar los recorridos de un nivel y con límite configurable.
+- [x] T17. Implementar los recorridos de un nivel y con límite configurable.
 RF: RF-3, RF-4.
 Hecho cuando: Tests verifican que un nivel no encola descendientes y que el modo limitado cuenta la inicial, usa 100 por defecto y publica al alcanzar el máximo.
 
