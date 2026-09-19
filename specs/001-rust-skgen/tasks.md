@@ -120,7 +120,7 @@ Hecho cuando: Tests cubren ausencia de skills, selección mixta, continuación t
 RF: RF-6, RF-7.
 Hecho cuando: Un test verifica que la operación se rechaza antes de modificar cualquier skill.
 
-- [ ] T31. Implementar el contrato de argumentos de `create` y `update`.
+- [x] T31. Implementar el contrato de argumentos de `create` y `update`.
 RF: RF-1, RF-3, RF-5, RF-6.
 Hecho cuando: Tests de CLI cubren argumentos obligatorios, valores predeterminados, combinaciones inválidas y parámetros de actualización individual o múltiple.
 
