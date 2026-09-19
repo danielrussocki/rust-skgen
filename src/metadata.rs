@@ -1,6 +1,7 @@
 //! Managed skill metadata serialization and validation.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::domain::{
     AuthorizedHost, ContentFormat, DiscoveryConfiguration, DiscoveryConfigurationError,
@@ -12,6 +13,11 @@ pub const SCHEMA_VERSION: u32 = 1;
 
 /// Identifies metadata produced by this generator.
 pub const GENERATOR: &str = "rust-skgen";
+
+/// Calculates the SHA-256 digest stored for generated managed content.
+pub fn content_digest(content: &str) -> String {
+    format!("sha256:{:x}", Sha256::digest(content.as_bytes()))
+}
 
 /// Validated metadata used to identify and recreate a managed skill.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -61,6 +67,11 @@ impl ManagedSkillMetadata {
     /// Returns the persisted digest of the managed content.
     pub fn content_digest(&self) -> &str {
         &self.content_digest
+    }
+
+    /// Returns whether the supplied managed content matches its stored digest.
+    pub fn has_matching_content_digest(&self, content: &str) -> bool {
+        self.content_digest == content_digest(content)
     }
 }
 

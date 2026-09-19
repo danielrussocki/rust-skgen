@@ -76,7 +76,7 @@ Hecho cuando: Cada fallo de una página conserva intacta la skill previa y no de
 RF: RF-4, RF-5, RF-6.
 Hecho cuando: Tests serializan y deserializan todos los campos de configuración requeridos y rechazan versiones, valores o campos esenciales inválidos.
 
-- [ ] T20. Calcular y verificar la huella del contenido gestionado.
+- [x] T20. Calcular y verificar la huella del contenido gestionado.
 RF: RF-4, RF-6.
 Hecho cuando: Tests detectan una modificación manual del contenido y aceptan contenido sin cambios.
 
