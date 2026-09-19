@@ -36,7 +36,7 @@ Hecho cuando: Tests prueban que URLs que solo difieren por consulta o fragmento 
 RF: RF-3.
 Hecho cuando: Tests cubren esquema, host, puerto, subdominios autorizados y el requisito de enlace previo.
 
-- [ ] T10. Implementar las reglas de alcance por prefijo de ruta y directorio padre.
+- [x] T10. Implementar las reglas de alcance por prefijo de ruta y directorio padre.
 RF: RF-3.
 Hecho cuando: Tests deterministas aceptan únicamente URLs dentro del prefijo o directorio correspondiente.
 
