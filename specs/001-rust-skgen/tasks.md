@@ -88,7 +88,7 @@ Hecho cuando: El resultado contiene objetivo e instrucciones derivados de conten
 RF: RF-4.
 Hecho cuando: El resultado contiene solo contenido extraído ordenado por página o tema y sus URLs de fuente.
 
-- [ ] T23. Implementar la localización de skills gestionadas y la lectura de sus metadatos.
+- [x] T23. Implementar la localización de skills gestionadas y la lectura de sus metadatos.
 RF: RF-5, RF-6.
 Hecho cuando: Tests distinguen skills gestionadas, no gestionadas, con metadatos ausentes e inválidos.
 
