@@ -20,7 +20,7 @@ Hecho cuando: Los módulos `cli`, `domain`, `fetch`, `policy`, `discover`, `extr
 RF: RF-1, RF-6.
 Hecho cuando: Tests deterministas aceptan slugs de hasta 64 caracteres y rechazan mayúsculas, caracteres no ASCII, guiones extremos y longitudes mayores.
 
-- [ ] T06. Definir los tipos de URL de origen, alcance, límite de sitio, modo de recorrido y formato de contenido.
+- [x] T06. Definir los tipos de URL de origen, alcance, límite de sitio, modo de recorrido y formato de contenido.
 RF: RF-1, RF-3, RF-4, RF-6.
 Hecho cuando: Los tipos expresan todos los valores permitidos y sus valores predeterminados sin usar cadenas libres fuera de la frontera de CLI.
 
