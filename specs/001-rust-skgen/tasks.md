@@ -128,6 +128,6 @@ Hecho cuando: Tests de CLI cubren argumentos obligatorios, valores predeterminad
 RF: RF-7.
 Hecho cuando: Tests de CLI verifican salida estándar, salida de error y códigos `0`, `1` y `2` para éxito, fallo de skill y argumentos inválidos.
 
-- [ ] T33. Ejecutar la suite completa y corregir incumplimientos de formato, lint y pruebas.
+- [x] T33. Ejecutar la suite completa y corregir incumplimientos de formato, lint y pruebas.
 RF: RF-1 a RF-7.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.
