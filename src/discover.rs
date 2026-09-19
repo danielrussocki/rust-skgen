@@ -30,6 +30,8 @@ pub enum DiscoveryError {
     Redirect(Url),
     /// A source document did not return a successful HTTP status.
     UnexpectedStatus { url: Url, status: u16 },
+    /// A source document did not return HTML suitable for extraction.
+    NonHtmlContent { url: Url, content_type: String },
     /// A source document did not contain extractable documentation.
     Extraction(DocumentExtractionError),
 }
@@ -47,6 +49,12 @@ impl std::fmt::Display for DiscoveryError {
                     "URL returned unexpected HTTP status {status}: {url}"
                 )
             }
+            Self::NonHtmlContent { url, content_type } => {
+                write!(
+                    formatter,
+                    "URL returned non-HTML content type {content_type}: {url}"
+                )
+            }
             Self::Extraction(error) => {
                 write!(formatter, "failed to extract documentation: {error}")
             }
@@ -60,7 +68,10 @@ impl std::error::Error for DiscoveryError {
             Self::Policy(error) => Some(error),
             Self::Fetch(error) => Some(error),
             Self::Extraction(error) => Some(error),
-            Self::Forbidden(_) | Self::Redirect(_) | Self::UnexpectedStatus { .. } => None,
+            Self::Forbidden(_)
+            | Self::Redirect(_)
+            | Self::UnexpectedStatus { .. }
+            | Self::NonHtmlContent { .. } => None,
         }
     }
 }
@@ -136,6 +147,12 @@ fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
         return Err(DiscoveryError::UnexpectedStatus {
             url,
             status: document.status(),
+        });
+    }
+    if !document.is_html() {
+        return Err(DiscoveryError::NonHtmlContent {
+            url,
+            content_type: document.content_type().unwrap_or_default().to_owned(),
         });
     }
 

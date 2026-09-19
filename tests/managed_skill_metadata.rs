@@ -111,3 +111,19 @@ fn rejects_metadata_missing_an_essential_field() {
 
     assert!(ManagedSkillMetadata::from_json(invalid).is_err());
 }
+
+#[test]
+fn rejects_empty_or_malformed_content_digests() {
+    let valid_digest = "sha256:7b50fcd0d5f3a4c8b3e53b7a8585a35e42f2cfc0cb37360e6f4ecaa7f2e7166e";
+
+    for digest in [
+        "",
+        "sha512:abc",
+        "sha256:abc",
+        "sha256:zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    ] {
+        let invalid = metadata().to_json().unwrap().replace(valid_digest, digest);
+
+        assert!(ManagedSkillMetadata::from_json(&invalid).is_err());
+    }
+}

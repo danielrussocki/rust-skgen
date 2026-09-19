@@ -92,6 +92,8 @@ pub enum MetadataError {
     InvalidDiscoveryConfiguration(DiscoveryConfigurationError),
     /// The stored content digest is empty.
     EmptyContentDigest,
+    /// The stored content digest is not a SHA-256 digest.
+    InvalidContentDigest(String),
 }
 
 impl std::fmt::Display for MetadataError {
@@ -119,6 +121,12 @@ impl std::fmt::Display for MetadataError {
             Self::EmptyContentDigest => {
                 formatter.write_str("metadata content digest cannot be empty")
             }
+            Self::InvalidContentDigest(digest) => {
+                write!(
+                    formatter,
+                    "metadata content digest is not a SHA-256 digest: {digest}"
+                )
+            }
         }
     }
 }
@@ -131,7 +139,8 @@ impl std::error::Error for MetadataError {
             Self::InvalidDiscoveryConfiguration(error) => Some(error),
             Self::UnsupportedSchemaVersion(_)
             | Self::UnsupportedGenerator(_)
-            | Self::EmptyContentDigest => None,
+            | Self::EmptyContentDigest
+            | Self::InvalidContentDigest(_) => None,
         }
     }
 }
@@ -236,6 +245,9 @@ impl TryFrom<RawMetadata> for ManagedSkillMetadata {
         if raw.content_digest.is_empty() {
             return Err(MetadataError::EmptyContentDigest);
         }
+        if !is_sha256_digest(&raw.content_digest) {
+            return Err(MetadataError::InvalidContentDigest(raw.content_digest));
+        }
 
         let scope: DiscoveryScope = raw.discovery.scope.into();
         let site_boundary = match scope {
@@ -271,6 +283,12 @@ impl TryFrom<RawMetadata> for ManagedSkillMetadata {
             SourceUrl::parse(&raw.source_url).map_err(MetadataError::InvalidSourceUrl)?;
         Ok(Self::new(source_url, discovery, raw.content_digest))
     }
+}
+
+fn is_sha256_digest(value: &str) -> bool {
+    value.strip_prefix("sha256:").is_some_and(|digest| {
+        digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+    })
 }
 
 impl From<DiscoveryScope> for RawDiscoveryScope {

@@ -39,12 +39,33 @@ pub struct FetchedDocument {
     url: Url,
     status: u16,
     body: String,
+    content_type: Option<String>,
 }
 
 impl FetchedDocument {
     /// Creates a fetched document from its response details.
     pub fn new(url: Url, status: u16, body: String) -> Self {
-        Self { url, status, body }
+        Self {
+            url,
+            status,
+            body,
+            content_type: None,
+        }
+    }
+
+    /// Creates a fetched document with its response content type.
+    pub fn new_with_content_type(
+        url: Url,
+        status: u16,
+        body: String,
+        content_type: String,
+    ) -> Self {
+        Self {
+            url,
+            status,
+            body,
+            content_type: Some(content_type),
+        }
     }
 
     /// Returns the URL that produced this response.
@@ -60,6 +81,21 @@ impl FetchedDocument {
     /// Returns the response body decoded by the HTTP client.
     pub fn body(&self) -> &str {
         &self.body
+    }
+
+    /// Returns whether the response content type is suitable for HTML extraction.
+    pub fn is_html(&self) -> bool {
+        self.content_type.as_deref().is_none_or(|content_type| {
+            matches!(
+                content_type.split(';').next().map(str::trim),
+                Some("text/html" | "application/xhtml+xml")
+            )
+        })
+    }
+
+    /// Returns the response content type when the fetcher provided it.
+    pub fn content_type(&self) -> Option<&str> {
+        self.content_type.as_deref()
     }
 }
 
@@ -153,8 +189,21 @@ impl DocumentFetcher for HttpDocumentFetcher {
                 Ok(response) => {
                     let document_url = response.url().clone();
                     let status = response.status().as_u16();
+                    let content_type = response
+                        .headers()
+                        .get(reqwest::header::CONTENT_TYPE)
+                        .and_then(|value| value.to_str().ok())
+                        .map(str::to_owned);
                     let body = response.text().map_err(FetchError::ResponseBody)?;
-                    return Ok(FetchedDocument::new(document_url, status, body));
+                    return Ok(match content_type {
+                        Some(content_type) => FetchedDocument::new_with_content_type(
+                            document_url,
+                            status,
+                            body,
+                            content_type,
+                        ),
+                        None => FetchedDocument::new(document_url, status, body),
+                    });
                 }
                 Err(_) if retries_remaining > 0 => {
                     retries_remaining -= 1;

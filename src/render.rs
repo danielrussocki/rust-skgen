@@ -11,8 +11,14 @@ pub fn render_guide_with_references(pages: &[DocumentationPage]) -> String {
     pages.sort_by_cached_key(|page| canonical_source_url(page));
 
     let objective = pages.first().map_or("", |page| page.content());
-    let mut rendered =
-        format!("# Documentation Guide\n\n## Objective\n\n{objective}\n\n## Instructions\n");
+    let instructions = pages
+        .iter()
+        .map(|page| page.content())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let mut rendered = format!(
+        "# Documentation Guide\n\n## Objective\n\n{objective}\n\n## Instructions\n\n{instructions}\n"
+    );
 
     for page in &pages {
         rendered.push_str(&format!(

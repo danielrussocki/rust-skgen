@@ -144,15 +144,15 @@ Hecho cuando: Tests deterministas rechazan para ambos alcances una URL de otro h
 RF: RF-3.
 Hecho cuando: Un doble de política que prohíbe una URL hace fallar la operación sin publicar una skill nueva ni alterar una existente.
 
-- [ ] T37. Rechazar respuestas que no sean HTML apto para extracción documental.
+- [x] T37. Rechazar respuestas que no sean HTML apto para extracción documental.
 RF: RF-1, RF-3.
 Hecho cuando: Un servidor local que devuelve una respuesta 2xx con contenido no HTML provoca un fallo atómico de creación y actualización.
 
-- [ ] T38. Derivar de forma determinista el objetivo y las instrucciones de la guía exclusivamente de las páginas extraídas.
+- [x] T38. Derivar de forma determinista el objetivo y las instrucciones de la guía exclusivamente de las páginas extraídas.
 RF: RF-4.
 Hecho cuando: Un test de renderizado verifica que `Objective` e `Instructions` no están vacíos, proceden de contenido de prueba extraído y no incluyen texto ajeno a las fuentes.
 
-- [ ] T39. Validar estructuralmente la huella `content_digest` de los metadatos.
+- [x] T39. Validar estructuralmente la huella `content_digest` de los metadatos.
 RF: RF-4, RF-6.
 Hecho cuando: Tests de deserialización rechazan huellas vacías, prefijos distintos de `sha256:` y valores que no contienen exactamente 64 dígitos hexadecimales.
 

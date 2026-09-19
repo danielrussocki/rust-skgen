@@ -55,6 +55,19 @@ impl DocumentFetcher for LocalDocumentationFetcher {
     }
 }
 
+struct NonHtmlDocumentationFetcher;
+
+impl DocumentFetcher for NonHtmlDocumentationFetcher {
+    fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
+        Ok(FetchedDocument::new_with_content_type(
+            url,
+            200,
+            "{\"message\":\"not documentation\"}".to_owned(),
+            "application/json".to_owned(),
+        ))
+    }
+}
+
 struct AllowAllPolicy;
 
 impl CrawlPolicy for AllowAllPolicy {
@@ -140,6 +153,25 @@ fn does_not_publish_a_skill_when_access_conditions_forbid_a_related_page() {
         request,
         &fetcher,
         &policy,
+        &TransactionalSkillCreator::new(skills.path()),
+    );
+
+    assert!(result.is_err());
+    assert!(!skills.path().join(name.as_str()).exists());
+}
+
+#[test]
+fn does_not_publish_a_skill_from_a_non_html_response() {
+    let skills = TemporarySkillsDirectory::new();
+    let source_url = SourceUrl::parse("https://docs.example.test/start").unwrap();
+    let name = SkillName::parse("json-docs").unwrap();
+    let request =
+        CreateSkillRequest::new(name.clone(), source_url, DiscoveryConfiguration::default());
+
+    let result = create_skill(
+        request,
+        &NonHtmlDocumentationFetcher,
+        &AllowAllPolicy,
         &TransactionalSkillCreator::new(skills.path()),
     );
 

@@ -52,6 +52,19 @@ struct LocalDocumentationFetcher {
     documents: BTreeMap<Url, String>,
 }
 
+struct NonHtmlDocumentationFetcher;
+
+impl DocumentFetcher for NonHtmlDocumentationFetcher {
+    fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
+        Ok(FetchedDocument::new_with_content_type(
+            url,
+            200,
+            "{\"message\":\"not documentation\"}".to_owned(),
+            "application/json".to_owned(),
+        ))
+    }
+}
+
 impl DocumentFetcher for LocalDocumentationFetcher {
     fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
         let Some(body) = self.documents.get(&url) else {
@@ -322,6 +335,36 @@ fn detects_missing_metadata_as_requiring_a_rebuild() {
     );
 
     assert!(matches!(result, Err(UpdateSkillError::RebuildRequired(_))));
+}
+
+#[test]
+fn preserves_a_skill_when_an_update_receives_a_non_html_response() {
+    let skills = TemporarySkillsDirectory::new();
+    let name = SkillName::parse("json-update").unwrap();
+    let creator = TransactionalSkillCreator::new(skills.path());
+    creator
+        .create(&name, "# Previous skill\n", &initial_metadata())
+        .unwrap();
+    let skill_file = skills.path().join(name.as_str()).join(SKILL_FILE_NAME);
+    let metadata_file = skills.path().join(name.as_str()).join(METADATA_FILE_NAME);
+    let original_metadata = fs::read_to_string(&metadata_file).unwrap();
+
+    let result = update_skill(
+        UpdateSkillRequest::new(name),
+        &NonHtmlDocumentationFetcher,
+        &AllowAllPolicy,
+        &creator,
+    );
+
+    assert!(result.is_err());
+    assert_eq!(
+        fs::read_to_string(skill_file).unwrap(),
+        "# Previous skill\n"
+    );
+    assert_eq!(
+        fs::read_to_string(metadata_file).unwrap(),
+        original_metadata
+    );
 }
 
 #[test]

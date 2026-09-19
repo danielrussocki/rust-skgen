@@ -24,7 +24,7 @@ fn renders_a_guide_with_an_extracted_objective_instructions_and_references() {
 
     assert_eq!(
         rendered,
-        "# Documentation Guide\n\n## Objective\n\nConfigure components with the documented options.\n\n## Instructions\n\n### Source: https://docs.example.com/guides/configuration\n\nConfigure components with the documented options.\n\n### Source: https://docs.example.com/guides/installation\n\nInstall the package before configuring components.\n\n## References\n\n- https://docs.example.com/guides/configuration\n- https://docs.example.com/guides/installation\n"
+        "# Documentation Guide\n\n## Objective\n\nConfigure components with the documented options.\n\n## Instructions\n\nConfigure components with the documented options.\n\nInstall the package before configuring components.\n\n### Source: https://docs.example.com/guides/configuration\n\nConfigure components with the documented options.\n\n### Source: https://docs.example.com/guides/installation\n\nInstall the package before configuring components.\n\n## References\n\n- https://docs.example.com/guides/configuration\n- https://docs.example.com/guides/installation\n"
     );
 }
 
@@ -46,4 +46,24 @@ fn orders_pages_by_canonical_source_url_regardless_of_input_order() {
     assert!(forward.contains("## Objective\n\nUse the Alpha component."));
     assert!(forward.contains("### Source: https://docs.example.com/alpha?version=1#overview"));
     assert!(forward.contains("### Source: https://docs.example.com/zebra?version=2#usage"));
+}
+
+#[test]
+fn derives_non_empty_objective_and_instructions_only_from_extracted_content() {
+    let rendered = render_guide_with_references(&[
+        page(
+            "https://docs.example.com/usage",
+            "Use the widget with its documented options.",
+        ),
+        page(
+            "https://docs.example.com/overview",
+            "The widget provides accessible interactions.",
+        ),
+    ]);
+
+    assert!(rendered.contains("## Objective\n\nThe widget provides accessible interactions."));
+    assert!(rendered.contains(
+        "## Instructions\n\nThe widget provides accessible interactions.\n\nUse the widget with its documented options."
+    ));
+    assert!(!rendered.contains("Use this skill"));
 }
