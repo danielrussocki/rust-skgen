@@ -151,6 +151,35 @@ impl std::error::Error for SourceUrlError {
     }
 }
 
+/// Documentation extracted from one source page.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DocumentationPage {
+    source_url: Url,
+    content: String,
+}
+
+impl DocumentationPage {
+    /// Creates a page whose content remains attributable to its source URL.
+    pub fn new(source_url: Url, content: String) -> Self {
+        Self {
+            source_url,
+            content,
+        }
+    }
+
+    /// Returns the URL from which the content was extracted.
+    pub fn source_url(&self) -> &Url {
+        &self.source_url
+    }
+
+    /// Returns normalized extracted documentation content.
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+}
+
+impl SkillModel for DocumentationPage {}
+
 /// Determines which related documentation URLs may be discovered.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum DiscoveryScope {

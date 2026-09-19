@@ -52,11 +52,11 @@ Hecho cuando: Un servidor local de prueba verifica cabecera, ausencia de seguimi
 RF: RF-3.
 Hecho cuando: Tests locales prueban una URL permitida y otra prohibida para el `User-Agent` configurado.
 
-- [ ] T14. Implementar la extracción de enlaces absolutos y relativos desde HTML.
+- [x] T14. Implementar la extracción de enlaces absolutos y relativos desde HTML.
 RF: RF-3.
 Hecho cuando: Tests convierten enlaces relativos a URLs absolutas y descartan esquemas no HTTP(S).
 
-- [ ] T15. Implementar la extracción de contenido documental normalizado con URL de fuente.
+- [x] T15. Implementar la extracción de contenido documental normalizado con URL de fuente.
 RF: RF-3, RF-4.
 Hecho cuando: Un HTML de prueba produce una página documental con contenido y URL atribuible, y contenido no documental produce un error.
 
