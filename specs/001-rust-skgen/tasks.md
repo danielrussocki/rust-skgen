@@ -48,7 +48,7 @@ Hecho cuando: Un documento de prueba incluye enlaces dentro y fuera de navegaci�
 RF: RF-1, RF-3.
 Hecho cuando: Un servidor local de prueba verifica cabecera, ausencia de seguimiento de redirecciones, reintentos limitados y concurrencia máxima de una.
 
-- [ ] T13. Implementar la lectura y evaluación de `robots.txt` antes de solicitar cada página.
+- [x] T13. Implementar la lectura y evaluación de `robots.txt` antes de solicitar cada página.
 RF: RF-3.
 Hecho cuando: Tests locales prueban una URL permitida y otra prohibida para el `User-Agent` configurado.
 
