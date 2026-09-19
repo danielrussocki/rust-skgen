@@ -84,7 +84,7 @@ Hecho cuando: Tests detectan una modificación manual del contenido y aceptan co
 RF: RF-4.
 Hecho cuando: El resultado contiene objetivo e instrucciones derivados de contenido extraído, contenido ordenado y URL atribuida de cada fuente.
 
-- [ ] T22. Implementar el renderizado determinista del formato de contenido organizado.
+- [x] T22. Implementar el renderizado determinista del formato de contenido organizado.
 RF: RF-4.
 Hecho cuando: El resultado contiene solo contenido extraído ordenado por página o tema y sus URLs de fuente.
 

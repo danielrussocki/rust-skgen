@@ -30,6 +30,22 @@ pub fn render_guide_with_references(pages: &[DocumentationPage]) -> String {
     rendered
 }
 
+/// Renders normalized documentation organized by attributable source page.
+pub fn render_organized_content(pages: &[DocumentationPage]) -> String {
+    let mut pages = pages.iter().collect::<Vec<_>>();
+    pages.sort_by_cached_key(|page| canonical_source_url(page));
+
+    let mut rendered = String::from("# Organized Documentation\n");
+    for page in pages {
+        rendered.push_str(&format!(
+            "\n## Source: {}\n\n{}\n",
+            page.source_url(),
+            page.content()
+        ));
+    }
+    rendered
+}
+
 fn canonical_source_url(page: &DocumentationPage) -> String {
     let mut source_url = page.source_url().clone();
     source_url.set_query(None);
