@@ -24,11 +24,11 @@ Hecho cuando: Tests deterministas aceptan slugs de hasta 64 caracteres y rechaza
 RF: RF-1, RF-3, RF-4, RF-6.
 Hecho cuando: Los tipos expresan todos los valores permitidos y sus valores predeterminados sin usar cadenas libres fuera de la frontera de CLI.
 
-- [ ] T07. Validar combinaciones de configuración de descubrimiento.
+- [x] T07. Validar combinaciones de configuración de descubrimiento.
 RF: RF-3, RF-6.
 Hecho cuando: Tests cubren valores predeterminados, máximo positivo, límite de sitio solo con mismo sitio y subdominios adicionales solo con dominio base.
 
-- [ ] T08. Implementar la normalización de URLs para equivalencia de visita.
+- [x] T08. Implementar la normalización de URLs para equivalencia de visita.
 RF: RF-3.
 Hecho cuando: Tests prueban que URLs que solo difieren por consulta o fragmento se consideran iguales.
 

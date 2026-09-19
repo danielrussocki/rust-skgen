@@ -206,3 +206,145 @@ pub enum ContentFormat {
 }
 
 impl SkillModel for ContentFormat {}
+
+/// A host explicitly authorized for base-domain discovery.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthorizedHost(String);
+
+impl AuthorizedHost {
+    /// Stores a host that was authorized at the CLI boundary.
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    /// Returns the authorized host.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl SkillModel for AuthorizedHost {}
+
+/// Validated settings that control related documentation discovery.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DiscoveryConfiguration {
+    scope: DiscoveryScope,
+    site_boundary: Option<SiteBoundary>,
+    authorized_subdomains: Vec<AuthorizedHost>,
+    traversal_mode: TraversalMode,
+    max_pages: Option<usize>,
+    content_format: ContentFormat,
+}
+
+impl DiscoveryConfiguration {
+    /// Default maximum number of pages for limited traversal.
+    pub const DEFAULT_MAX_PAGES: usize = 100;
+
+    /// Creates a validated discovery configuration.
+    pub fn new(
+        scope: DiscoveryScope,
+        site_boundary: Option<SiteBoundary>,
+        authorized_subdomains: Vec<AuthorizedHost>,
+        traversal_mode: TraversalMode,
+        max_pages: Option<usize>,
+        content_format: ContentFormat,
+    ) -> Result<Self, DiscoveryConfigurationError> {
+        if scope != DiscoveryScope::SameSite && site_boundary.is_some() {
+            return Err(DiscoveryConfigurationError::SiteBoundaryRequiresSameSiteScope);
+        }
+
+        if !authorized_subdomains.is_empty() && site_boundary != Some(SiteBoundary::BaseDomain) {
+            return Err(DiscoveryConfigurationError::AuthorizedSubdomainsRequireBaseDomain);
+        }
+
+        let max_pages = match traversal_mode {
+            TraversalMode::Limited => match max_pages {
+                Some(0) => return Err(DiscoveryConfigurationError::MaximumPagesMustBePositive),
+                Some(max_pages) => Some(max_pages),
+                None => Some(Self::DEFAULT_MAX_PAGES),
+            },
+            TraversalMode::All | TraversalMode::OneLevel => {
+                if max_pages.is_some() {
+                    return Err(DiscoveryConfigurationError::MaximumPagesRequiresLimitedTraversal);
+                }
+
+                None
+            }
+        };
+
+        Ok(Self {
+            scope,
+            site_boundary,
+            authorized_subdomains,
+            traversal_mode,
+            max_pages,
+            content_format,
+        })
+    }
+
+    /// Returns the selected discovery scope.
+    pub fn scope(&self) -> DiscoveryScope {
+        self.scope
+    }
+
+    /// Returns the effective site boundary.
+    pub fn site_boundary(&self) -> SiteBoundary {
+        self.site_boundary.unwrap_or_default()
+    }
+
+    /// Returns explicitly authorized subdomains.
+    pub fn authorized_subdomains(&self) -> &[AuthorizedHost] {
+        &self.authorized_subdomains
+    }
+
+    /// Returns the selected traversal mode.
+    pub fn traversal_mode(&self) -> TraversalMode {
+        self.traversal_mode
+    }
+
+    /// Returns the effective maximum page count for limited traversal.
+    pub fn max_pages(&self) -> Option<usize> {
+        self.max_pages
+    }
+
+    /// Returns the selected content format.
+    pub fn content_format(&self) -> ContentFormat {
+        self.content_format
+    }
+}
+
+impl SkillModel for DiscoveryConfiguration {}
+
+/// Error returned when discovery settings are incompatible.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DiscoveryConfigurationError {
+    /// A site boundary was selected outside same-site scope.
+    SiteBoundaryRequiresSameSiteScope,
+    /// Authorized subdomains were supplied without the base-domain boundary.
+    AuthorizedSubdomainsRequireBaseDomain,
+    /// A maximum page count was supplied for non-limited traversal.
+    MaximumPagesRequiresLimitedTraversal,
+    /// A limited traversal maximum was zero.
+    MaximumPagesMustBePositive,
+}
+
+impl std::fmt::Display for DiscoveryConfigurationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SiteBoundaryRequiresSameSiteScope => {
+                formatter.write_str("site boundary requires same-site scope")
+            }
+            Self::AuthorizedSubdomainsRequireBaseDomain => {
+                formatter.write_str("authorized subdomains require the base-domain boundary")
+            }
+            Self::MaximumPagesRequiresLimitedTraversal => {
+                formatter.write_str("maximum pages requires limited traversal")
+            }
+            Self::MaximumPagesMustBePositive => {
+                formatter.write_str("maximum pages must be positive")
+            }
+        }
+    }
+}
+
+impl std::error::Error for DiscoveryConfigurationError {}
