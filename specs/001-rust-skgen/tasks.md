@@ -44,7 +44,7 @@ Hecho cuando: Tests deterministas aceptan únicamente URLs dentro del prefijo o 
 RF: RF-3.
 Hecho cuando: Un documento de prueba incluye enlaces dentro y fuera de navegación, y solo se devuelven los primeros.
 
-- [ ] T12. Implementar el cliente HTTP(S) con `User-Agent`, tiempos de espera, reintentos acotados, una solicitud concurrente y redirecciones deshabilitadas.
+- [x] T12. Implementar el cliente HTTP(S) con `User-Agent`, tiempos de espera, reintentos acotados, una solicitud concurrente y redirecciones deshabilitadas.
 RF: RF-1, RF-3.
 Hecho cuando: Un servidor local de prueba verifica cabecera, ausencia de seguimiento de redirecciones, reintentos limitados y concurrencia máxima de una.
 
