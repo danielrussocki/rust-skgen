@@ -100,7 +100,7 @@ Hecho cuando: La creación publica contenido y metadatos completos bajo la ruta 
 RF: RF-2, RF-5, RF-6.
 Hecho cuando: Tests cubren fallo de escritura, conflicto de nombre, renombrado al mismo nombre, restauración de la versión previa y rechazo de una segunda operación simultánea.
 
-- [ ] T26. Implementar el servicio de creación que integra validación, descubrimiento, renderizado y publicación.
+- [x] T26. Implementar el servicio de creación que integra validación, descubrimiento, renderizado y publicación.
 RF: RF-1, RF-2, RF-3, RF-4, RF-7.
 Hecho cuando: Un test de extremo a extremo local crea una skill con fuentes atribuidas y devuelve un resultado de éxito.
 

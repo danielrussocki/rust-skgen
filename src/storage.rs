@@ -59,6 +59,7 @@ impl TransactionalSkillCreator {
 
     /// Acquires an exclusive lock for a skill operation.
     pub fn lock(&self, name: &SkillName) -> Result<SkillLock, StorageError> {
+        fs::create_dir_all(&self.skills_root).map_err(StorageError::CreateSkillsRoot)?;
         let path = self.skills_root.join(format!(".{}.lock", name.as_str()));
         fs::create_dir(&path).map_err(|error| {
             if error.kind() == io::ErrorKind::AlreadyExists {
