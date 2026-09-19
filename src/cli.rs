@@ -1,14 +1,109 @@
 //! CLI boundary for command handling.
 
+use std::io::{self, Write};
+
 use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
 
 use crate::domain::{
     AuthorizedHost, ContentFormat, DiscoveryConfiguration, DiscoveryConfigurationError,
     DiscoveryScope, SiteBoundary, SkillName, SourceUrl, TraversalMode,
 };
+use crate::service::{CreateSkillResult, UpdateSkillsResult};
 
 /// Marks a component that handles CLI commands.
 pub trait CommandHandler {}
+
+/// The presentation-ready outcome of one CLI command.
+#[derive(Debug)]
+pub enum CommandOutput {
+    /// One skill was created.
+    Created(SkillName),
+    /// One or more selected skills were updated independently.
+    Updated(Vec<SkillOutput>),
+    /// Updating all skills found no managed skills.
+    NoManagedSkills,
+}
+
+impl CommandOutput {
+    /// Converts a successful create-service result into CLI output.
+    pub fn from_created(result: CreateSkillResult) -> Self {
+        Self::Created(result.name().clone())
+    }
+
+    /// Converts update-service results into one CLI outcome per selected skill.
+    pub fn from_updated(result: UpdateSkillsResult) -> Self {
+        let outcomes = result
+            .outcomes()
+            .iter()
+            .map(|outcome| match outcome.result() {
+                Ok(result) => SkillOutput::Updated(result.name().clone()),
+                Err(error) => SkillOutput::Failed {
+                    name: outcome.name().clone(),
+                    reason: error.to_string(),
+                },
+            })
+            .collect();
+
+        Self::Updated(outcomes)
+    }
+}
+
+/// The presentation-ready outcome for one selected skill.
+#[derive(Debug)]
+pub enum SkillOutput {
+    /// The skill was updated successfully.
+    Updated(SkillName),
+    /// The skill failed while the remaining selection continued.
+    Failed {
+        /// Name of the skill that failed.
+        name: SkillName,
+        /// English error message explaining the failure.
+        reason: String,
+    },
+}
+
+/// Writes a completed command outcome and returns its process exit code.
+pub fn write_command_output(
+    output: CommandOutput,
+    standard_output: &mut dyn Write,
+    standard_error: &mut dyn Write,
+) -> io::Result<u8> {
+    match output {
+        CommandOutput::Created(name) => {
+            writeln!(standard_output, "Created skill: {}", name.as_str())?;
+            Ok(0)
+        }
+        CommandOutput::Updated(outcomes) => {
+            let mut has_failures = false;
+            for outcome in outcomes {
+                match outcome {
+                    SkillOutput::Updated(name) => {
+                        writeln!(standard_output, "Updated skill: {}", name.as_str())?;
+                    }
+                    SkillOutput::Failed { name, reason } => {
+                        writeln!(standard_error, "Failed skill: {}: {reason}", name.as_str())?;
+                        has_failures = true;
+                    }
+                }
+            }
+            Ok(if has_failures { 1 } else { 0 })
+        }
+        CommandOutput::NoManagedSkills => {
+            writeln!(standard_output, "No managed skills found.")?;
+            Ok(0)
+        }
+    }
+}
+
+/// Writes an argument validation failure and returns the invalid-argument exit code.
+pub fn write_invalid_argument(
+    reason: &str,
+    _standard_output: &mut dyn Write,
+    standard_error: &mut dyn Write,
+) -> io::Result<u8> {
+    writeln!(standard_error, "Invalid argument: {reason}")?;
+    Ok(2)
+}
 
 /// Parsed and validated command-line arguments.
 #[derive(Debug)]

@@ -124,7 +124,7 @@ Hecho cuando: Un test verifica que la operación se rechaza antes de modificar c
 RF: RF-1, RF-3, RF-5, RF-6.
 Hecho cuando: Tests de CLI cubren argumentos obligatorios, valores predeterminados, combinaciones inválidas y parámetros de actualización individual o múltiple.
 
-- [ ] T32. Implementar mensajes en inglés, resultados por skill y códigos de salida.
+- [x] T32. Implementar mensajes en inglés, resultados por skill y códigos de salida.
 RF: RF-7.
 Hecho cuando: Tests de CLI verifican salida estándar, salida de error y códigos `0`, `1` y `2` para éxito, fallo de skill y argumentos inválidos.
 
