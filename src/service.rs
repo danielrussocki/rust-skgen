@@ -16,6 +16,12 @@ use crate::{
 /// Marks a component that orchestrates skill operations.
 pub trait SkillService {}
 
+/// Requests approval before overwriting a skill whose management state must be rebuilt.
+pub trait RebuildConfirmation {
+    /// Returns approval, rejection, or no response from the caller.
+    fn confirm_rebuild(&self) -> Option<bool>;
+}
+
 /// Validated input required to create one managed skill.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CreateSkillRequest {
@@ -212,6 +218,10 @@ pub enum UpdateSkillError {
     SkillNotFound(SkillName),
     /// The selected skill has no valid generator metadata.
     SkillNotManaged(SkillName),
+    /// Metadata is absent, invalid, or does not match the managed content.
+    RebuildRequired(SkillName),
+    /// The user rejected rebuilding the management state or supplied no response.
+    RebuildDeclined(SkillName),
     /// The requested changes produce incompatible discovery settings.
     InvalidDiscoveryConfiguration(DiscoveryConfigurationError),
     /// Documentation discovery could not produce a complete skill input.
@@ -228,6 +238,20 @@ impl std::fmt::Display for UpdateSkillError {
             }
             Self::SkillNotManaged(name) => {
                 write!(formatter, "skill is not managed: {}", name.as_str())
+            }
+            Self::RebuildRequired(name) => {
+                write!(
+                    formatter,
+                    "skill requires metadata reconstruction: {}",
+                    name.as_str()
+                )
+            }
+            Self::RebuildDeclined(name) => {
+                write!(
+                    formatter,
+                    "metadata reconstruction was not confirmed: {}",
+                    name.as_str()
+                )
             }
             Self::InvalidDiscoveryConfiguration(error) => {
                 write!(formatter, "invalid update configuration: {error}")
@@ -246,7 +270,10 @@ impl std::error::Error for UpdateSkillError {
             Self::InvalidDiscoveryConfiguration(error) => Some(error),
             Self::Discovery(error) => Some(error),
             Self::Storage(error) => Some(error),
-            Self::SkillNotFound(_) | Self::SkillNotManaged(_) => None,
+            Self::SkillNotFound(_)
+            | Self::SkillNotManaged(_)
+            | Self::RebuildRequired(_)
+            | Self::RebuildDeclined(_) => None,
         }
     }
 }
@@ -258,12 +285,49 @@ pub fn update_skill<F: DocumentFetcher, P: CrawlPolicy>(
     policy: &P,
     publisher: &TransactionalSkillCreator,
 ) -> Result<UpdateSkillResult, UpdateSkillError> {
+    update_skill_inner(request, None, fetcher, policy, publisher)
+}
+
+/// Rebuilds one managed skill after requesting approval when its management state is unsafe.
+pub fn update_skill_with_confirmation<
+    F: DocumentFetcher,
+    P: CrawlPolicy,
+    C: RebuildConfirmation,
+>(
+    request: UpdateSkillRequest,
+    confirmation: &C,
+    fetcher: &F,
+    policy: &P,
+    publisher: &TransactionalSkillCreator,
+) -> Result<UpdateSkillResult, UpdateSkillError> {
+    update_skill_inner(request, Some(confirmation), fetcher, policy, publisher)
+}
+
+fn update_skill_inner<F: DocumentFetcher, P: CrawlPolicy>(
+    request: UpdateSkillRequest,
+    confirmation: Option<&dyn RebuildConfirmation>,
+    fetcher: &F,
+    policy: &P,
+    publisher: &TransactionalSkillCreator,
+) -> Result<UpdateSkillResult, UpdateSkillError> {
     let metadata = match publisher
         .management_status(&request.current_name)
         .map_err(UpdateSkillError::Storage)?
     {
-        Some(ManagedSkillStatus::Managed(metadata)) => metadata,
+        Some(ManagedSkillStatus::Managed(metadata)) => {
+            let content = publisher
+                .managed_content(&request.current_name)
+                .map_err(UpdateSkillError::Storage)?;
+            if content
+                .as_deref()
+                .is_none_or(|content| !metadata.has_matching_content_digest(content))
+            {
+                require_rebuild_confirmation(&request.current_name, confirmation)?;
+            }
+            metadata
+        }
         Some(ManagedSkillStatus::MetadataMissing | ManagedSkillStatus::InvalidMetadata(_)) => {
+            require_rebuild_confirmation(&request.current_name, confirmation)?;
             return Err(UpdateSkillError::SkillNotManaged(request.current_name));
         }
         None => return Err(UpdateSkillError::SkillNotFound(request.current_name)),
@@ -287,6 +351,17 @@ pub fn update_skill<F: DocumentFetcher, P: CrawlPolicy>(
         .map_err(UpdateSkillError::Storage)?;
 
     Ok(UpdateSkillResult { name: new_name })
+}
+
+fn require_rebuild_confirmation(
+    name: &SkillName,
+    confirmation: Option<&dyn RebuildConfirmation>,
+) -> Result<(), UpdateSkillError> {
+    match confirmation {
+        Some(confirmation) if confirmation.confirm_rebuild() == Some(true) => Ok(()),
+        Some(_) => Err(UpdateSkillError::RebuildDeclined(name.clone())),
+        None => Err(UpdateSkillError::RebuildRequired(name.clone())),
+    }
 }
 
 fn updated_discovery_configuration(

@@ -94,6 +94,16 @@ impl TransactionalSkillCreator {
         }
     }
 
+    /// Reads the rendered content of an existing skill, if present.
+    pub fn managed_content(&self, name: &SkillName) -> Result<Option<String>, StorageError> {
+        let path = self.skills_root.join(name.as_str()).join(SKILL_FILE_NAME);
+        match fs::read_to_string(&path) {
+            Ok(content) => Ok(Some(content)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(StorageError::ReadContent { path, error }),
+        }
+    }
+
     /// Replaces an existing skill, optionally publishing it under a new available name.
     pub fn replace(
         &self,
@@ -393,6 +403,8 @@ pub enum StorageError {
     ReadSkillsRoot(io::Error),
     /// Metadata for one skill could not be read.
     ReadMetadata { path: PathBuf, error: io::Error },
+    /// Managed content for one skill could not be read.
+    ReadContent { path: PathBuf, error: io::Error },
 }
 
 impl std::fmt::Display for StorageError {
@@ -459,6 +471,13 @@ impl std::fmt::Display for StorageError {
                     path.display()
                 )
             }
+            Self::ReadContent { path, error } => {
+                write!(
+                    formatter,
+                    "failed to read managed content at {}: {error}",
+                    path.display()
+                )
+            }
         }
     }
 }
@@ -479,7 +498,7 @@ impl std::error::Error for StorageError {
             Self::SerializeMetadata(error) => Some(error),
             Self::RestorePreviousSkill { publish_error, .. } => Some(publish_error),
             Self::DestinationExists(_) | Self::SkillLocked(_) | Self::SourceMissing(_) => None,
-            Self::ReadMetadata { error, .. } => Some(error),
+            Self::ReadMetadata { error, .. } | Self::ReadContent { error, .. } => Some(error),
         }
     }
 }

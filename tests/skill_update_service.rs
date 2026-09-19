@@ -13,8 +13,11 @@ use rust_skgen::{
     fetch::{DocumentFetcher, FetchError, FetchedDocument},
     metadata::{ManagedSkillMetadata, content_digest},
     policy::{CrawlPolicy, RobotsError},
-    service::{UpdateSkillRequest, update_skill},
-    storage::{METADATA_FILE_NAME, TransactionalSkillCreator},
+    service::{
+        RebuildConfirmation, UpdateSkillError, UpdateSkillRequest, update_skill,
+        update_skill_with_confirmation,
+    },
+    storage::{METADATA_FILE_NAME, SKILL_FILE_NAME, TransactionalSkillCreator},
 };
 use url::Url;
 
@@ -63,6 +66,14 @@ struct AllowAllPolicy;
 impl CrawlPolicy for AllowAllPolicy {
     fn allows(&self, _url: &Url) -> Result<bool, RobotsError> {
         Ok(true)
+    }
+}
+
+struct Confirmation(Option<bool>);
+
+impl RebuildConfirmation for Confirmation {
+    fn confirm_rebuild(&self) -> Option<bool> {
+        self.0
     }
 }
 
@@ -132,5 +143,123 @@ fn updates_each_individual_configuration_field_and_persists_it() {
     assert_eq!(
         metadata.discovery().content_format(),
         ContentFormat::OrganizedContent
+    );
+}
+
+#[test]
+fn detects_missing_metadata_as_requiring_a_rebuild() {
+    let skills = TemporarySkillsDirectory::new();
+    let name = SkillName::parse("missing-metadata").unwrap();
+    let skill_path = skills.path().join(name.as_str());
+    fs::create_dir(&skill_path).unwrap();
+    fs::write(skill_path.join(SKILL_FILE_NAME), "# Existing skill\n").unwrap();
+
+    let result = update_skill(
+        UpdateSkillRequest::new(name),
+        &LocalDocumentationFetcher {
+            documents: BTreeMap::new(),
+        },
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    );
+
+    assert!(matches!(result, Err(UpdateSkillError::RebuildRequired(_))));
+}
+
+#[test]
+fn detects_invalid_metadata_as_requiring_a_rebuild() {
+    let skills = TemporarySkillsDirectory::new();
+    let name = SkillName::parse("invalid-metadata").unwrap();
+    let skill_path = skills.path().join(name.as_str());
+    fs::create_dir(&skill_path).unwrap();
+    fs::write(skill_path.join(SKILL_FILE_NAME), "# Existing skill\n").unwrap();
+    fs::write(skill_path.join(METADATA_FILE_NAME), "not JSON").unwrap();
+
+    let result = update_skill(
+        UpdateSkillRequest::new(name),
+        &LocalDocumentationFetcher {
+            documents: BTreeMap::new(),
+        },
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    );
+
+    assert!(matches!(result, Err(UpdateSkillError::RebuildRequired(_))));
+}
+
+#[test]
+fn accepts_rebuild_confirmation_for_a_mismatched_content_digest() {
+    let skills = TemporarySkillsDirectory::new();
+    let name = SkillName::parse("changed-skill").unwrap();
+    TransactionalSkillCreator::new(skills.path())
+        .create(&name, "# Previous skill\n", &initial_metadata())
+        .unwrap();
+    fs::write(
+        skills.path().join(name.as_str()).join(SKILL_FILE_NAME),
+        "# Manually changed skill\n",
+    )
+    .unwrap();
+    let source_url = SourceUrl::parse("https://docs.example.test/start").unwrap();
+    let fetcher = LocalDocumentationFetcher {
+        documents: BTreeMap::from([(
+            source_url.as_url().clone(),
+            "<main><p>Rebuilt documentation.</p></main>".to_owned(),
+        )]),
+    };
+
+    let result = update_skill_with_confirmation(
+        UpdateSkillRequest::new(name.clone()),
+        &Confirmation(Some(true)),
+        &fetcher,
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    );
+
+    assert_eq!(result.unwrap().name(), &name);
+    assert_ne!(
+        fs::read_to_string(skills.path().join(name.as_str()).join(SKILL_FILE_NAME)).unwrap(),
+        "# Manually changed skill\n"
+    );
+}
+
+#[test]
+fn rejects_rebuild_confirmation_without_modifying_the_skill() {
+    assert_rebuild_is_not_published(Confirmation(Some(false)));
+}
+
+#[test]
+fn treats_an_absent_rebuild_response_as_rejected_without_modifying_the_skill() {
+    assert_rebuild_is_not_published(Confirmation(None));
+}
+
+fn assert_rebuild_is_not_published(confirmation: Confirmation) {
+    let skills = TemporarySkillsDirectory::new();
+    let name = SkillName::parse("changed-skill").unwrap();
+    TransactionalSkillCreator::new(skills.path())
+        .create(&name, "# Previous skill\n", &initial_metadata())
+        .unwrap();
+    let skill_file = skills.path().join(name.as_str()).join(SKILL_FILE_NAME);
+    let metadata_file = skills.path().join(name.as_str()).join(METADATA_FILE_NAME);
+    fs::write(&skill_file, "# Manually changed skill\n").unwrap();
+    let original_metadata = fs::read_to_string(&metadata_file).unwrap();
+
+    let result = update_skill_with_confirmation(
+        UpdateSkillRequest::new(name),
+        &confirmation,
+        &LocalDocumentationFetcher {
+            documents: BTreeMap::new(),
+        },
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    );
+
+    assert!(matches!(result, Err(UpdateSkillError::RebuildDeclined(_))));
+    assert_eq!(
+        fs::read_to_string(skill_file).unwrap(),
+        "# Manually changed skill\n"
+    );
+    assert_eq!(
+        fs::read_to_string(metadata_file).unwrap(),
+        original_metadata
     );
 }

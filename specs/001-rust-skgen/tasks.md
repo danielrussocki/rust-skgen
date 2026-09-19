@@ -108,7 +108,7 @@ Hecho cuando: Un test de extremo a extremo local crea una skill con fuentes atri
 RF: RF-2, RF-3, RF-4, RF-6.
 Hecho cuando: Tests actualizan nombre, URL, alcance, límite, recorrido, máximo y formato, y persisten la nueva configuración.
 
-- [ ] T28. Implementar la detección de metadatos ausentes, inválidos o con huella discrepante y el flujo de confirmación de reconstrucción.
+- [x] T28. Implementar la detección de metadatos ausentes, inválidos o con huella discrepante y el flujo de confirmación de reconstrucción.
 RF: RF-5, RF-6.
 Hecho cuando: Tests cubren confirmación aceptada, rechazada y sin respuesta; los dos últimos casos no modifican la skill.
 
