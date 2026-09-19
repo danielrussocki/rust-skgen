@@ -71,6 +71,29 @@ impl TransactionalSkillCreator {
         Ok(SkillLock { path })
     }
 
+    /// Reads the management status for one existing skill without modifying it.
+    pub fn management_status(
+        &self,
+        name: &SkillName,
+    ) -> Result<Option<ManagedSkillStatus>, StorageError> {
+        let path = self.skills_root.join(name.as_str());
+        if !path.is_dir() {
+            return Ok(None);
+        }
+
+        let metadata_path = path.join(METADATA_FILE_NAME);
+        match fs::read_to_string(metadata_path) {
+            Ok(value) => match ManagedSkillMetadata::from_json(&value) {
+                Ok(metadata) => Ok(Some(ManagedSkillStatus::Managed(metadata))),
+                Err(error) => Ok(Some(ManagedSkillStatus::InvalidMetadata(error))),
+            },
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                Ok(Some(ManagedSkillStatus::MetadataMissing))
+            }
+            Err(error) => Err(StorageError::ReadMetadata { path, error }),
+        }
+    }
+
     /// Replaces an existing skill, optionally publishing it under a new available name.
     pub fn replace(
         &self,

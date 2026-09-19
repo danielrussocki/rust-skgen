@@ -104,7 +104,7 @@ Hecho cuando: Tests cubren fallo de escritura, conflicto de nombre, renombrado a
 RF: RF-1, RF-2, RF-3, RF-4, RF-7.
 Hecho cuando: Un test de extremo a extremo local crea una skill con fuentes atribuidas y devuelve un resultado de éxito.
 
-- [ ] T27. Implementar el servicio de actualización de una skill con cambios de configuración individuales.
+- [x] T27. Implementar el servicio de actualización de una skill con cambios de configuración individuales.
 RF: RF-2, RF-3, RF-4, RF-6.
 Hecho cuando: Tests actualizan nombre, URL, alcance, límite, recorrido, máximo y formato, y persisten la nueva configuración.
 

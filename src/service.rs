@@ -2,12 +2,15 @@
 
 use crate::{
     discover::{DiscoveryError, discover_all},
-    domain::{ContentFormat, DiscoveryConfiguration, SkillName, SourceUrl},
+    domain::{
+        AuthorizedHost, ContentFormat, DiscoveryConfiguration, DiscoveryConfigurationError,
+        DiscoveryScope, SiteBoundary, SkillName, SourceUrl, TraversalMode,
+    },
     fetch::DocumentFetcher,
     metadata::{ManagedSkillMetadata, content_digest},
     policy::CrawlPolicy,
     render::{render_guide_with_references, render_organized_content},
-    storage::{StorageError, TransactionalSkillCreator},
+    storage::{ManagedSkillStatus, StorageError, TransactionalSkillCreator},
 };
 
 /// Marks a component that orchestrates skill operations.
@@ -105,4 +108,232 @@ pub fn create_skill<F: DocumentFetcher, P: CrawlPolicy>(
         .map_err(CreateSkillError::Storage)?;
 
     Ok(CreateSkillResult { name: request.name })
+}
+
+/// Validated partial configuration changes for one managed skill.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UpdateSkillRequest {
+    current_name: SkillName,
+    new_name: Option<SkillName>,
+    source_url: Option<SourceUrl>,
+    scope: Option<DiscoveryScope>,
+    site_boundary: Option<SiteBoundary>,
+    authorized_subdomains: Option<Vec<AuthorizedHost>>,
+    traversal_mode: Option<TraversalMode>,
+    max_pages: Option<usize>,
+    content_format: Option<ContentFormat>,
+}
+
+impl UpdateSkillRequest {
+    /// Starts an update for the managed skill selected by its current name.
+    pub fn new(current_name: SkillName) -> Self {
+        Self {
+            current_name,
+            new_name: None,
+            source_url: None,
+            scope: None,
+            site_boundary: None,
+            authorized_subdomains: None,
+            traversal_mode: None,
+            max_pages: None,
+            content_format: None,
+        }
+    }
+
+    /// Changes the published skill name.
+    pub fn with_name(mut self, name: SkillName) -> Self {
+        self.new_name = Some(name);
+        self
+    }
+
+    /// Changes the documentation source URL.
+    pub fn with_source_url(mut self, source_url: SourceUrl) -> Self {
+        self.source_url = Some(source_url);
+        self
+    }
+
+    /// Changes the discovery scope.
+    pub fn with_scope(mut self, scope: DiscoveryScope) -> Self {
+        self.scope = Some(scope);
+        self
+    }
+
+    /// Changes the same-site boundary.
+    pub fn with_site_boundary(mut self, site_boundary: SiteBoundary) -> Self {
+        self.site_boundary = Some(site_boundary);
+        self
+    }
+
+    /// Replaces the explicitly authorized base-domain subdomains.
+    pub fn with_authorized_subdomains(
+        mut self,
+        authorized_subdomains: Vec<AuthorizedHost>,
+    ) -> Self {
+        self.authorized_subdomains = Some(authorized_subdomains);
+        self
+    }
+
+    /// Changes the traversal mode.
+    pub fn with_traversal_mode(mut self, traversal_mode: TraversalMode) -> Self {
+        self.traversal_mode = Some(traversal_mode);
+        self
+    }
+
+    /// Changes the maximum page count for limited traversal.
+    pub fn with_max_pages(mut self, max_pages: usize) -> Self {
+        self.max_pages = Some(max_pages);
+        self
+    }
+
+    /// Changes the generated content format.
+    pub fn with_content_format(mut self, content_format: ContentFormat) -> Self {
+        self.content_format = Some(content_format);
+        self
+    }
+}
+
+/// Successful result of updating one managed skill.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UpdateSkillResult {
+    name: SkillName,
+}
+
+impl UpdateSkillResult {
+    /// Returns the name under which the updated skill was published.
+    pub fn name(&self) -> &SkillName {
+        &self.name
+    }
+}
+
+/// Error returned while rebuilding and replacing one managed skill.
+#[derive(Debug)]
+pub enum UpdateSkillError {
+    /// The selected skill directory does not exist.
+    SkillNotFound(SkillName),
+    /// The selected skill has no valid generator metadata.
+    SkillNotManaged(SkillName),
+    /// The requested changes produce incompatible discovery settings.
+    InvalidDiscoveryConfiguration(DiscoveryConfigurationError),
+    /// Documentation discovery could not produce a complete skill input.
+    Discovery(DiscoveryError),
+    /// The complete skill could not be read, locked, or published.
+    Storage(StorageError),
+}
+
+impl std::fmt::Display for UpdateSkillError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SkillNotFound(name) => {
+                write!(formatter, "skill does not exist: {}", name.as_str())
+            }
+            Self::SkillNotManaged(name) => {
+                write!(formatter, "skill is not managed: {}", name.as_str())
+            }
+            Self::InvalidDiscoveryConfiguration(error) => {
+                write!(formatter, "invalid update configuration: {error}")
+            }
+            Self::Discovery(error) => {
+                write!(formatter, "failed to discover documentation: {error}")
+            }
+            Self::Storage(error) => write!(formatter, "failed to replace skill: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for UpdateSkillError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidDiscoveryConfiguration(error) => Some(error),
+            Self::Discovery(error) => Some(error),
+            Self::Storage(error) => Some(error),
+            Self::SkillNotFound(_) | Self::SkillNotManaged(_) => None,
+        }
+    }
+}
+
+/// Rebuilds one managed skill using its persisted settings plus the requested changes.
+pub fn update_skill<F: DocumentFetcher, P: CrawlPolicy>(
+    request: UpdateSkillRequest,
+    fetcher: &F,
+    policy: &P,
+    publisher: &TransactionalSkillCreator,
+) -> Result<UpdateSkillResult, UpdateSkillError> {
+    let metadata = match publisher
+        .management_status(&request.current_name)
+        .map_err(UpdateSkillError::Storage)?
+    {
+        Some(ManagedSkillStatus::Managed(metadata)) => metadata,
+        Some(ManagedSkillStatus::MetadataMissing | ManagedSkillStatus::InvalidMetadata(_)) => {
+            return Err(UpdateSkillError::SkillNotManaged(request.current_name));
+        }
+        None => return Err(UpdateSkillError::SkillNotFound(request.current_name)),
+    };
+    let discovery = updated_discovery_configuration(&metadata, &request)?;
+    let source_url = request
+        .source_url
+        .unwrap_or_else(|| metadata.source_url().clone());
+    let new_name = request
+        .new_name
+        .unwrap_or_else(|| request.current_name.clone());
+    let pages = discover_all(source_url.as_url().clone(), &discovery, fetcher, policy)
+        .map_err(UpdateSkillError::Discovery)?;
+    let content = match discovery.content_format() {
+        ContentFormat::GuideWithReferences => render_guide_with_references(&pages),
+        ContentFormat::OrganizedContent => render_organized_content(&pages),
+    };
+    let metadata = ManagedSkillMetadata::new(source_url, discovery, content_digest(&content));
+    publisher
+        .replace(&request.current_name, &new_name, &content, &metadata)
+        .map_err(UpdateSkillError::Storage)?;
+
+    Ok(UpdateSkillResult { name: new_name })
+}
+
+fn updated_discovery_configuration(
+    metadata: &ManagedSkillMetadata,
+    request: &UpdateSkillRequest,
+) -> Result<DiscoveryConfiguration, UpdateSkillError> {
+    let previous = metadata.discovery();
+    let scope = request.scope.unwrap_or_else(|| previous.scope());
+    let site_boundary = (scope == DiscoveryScope::SameSite).then(|| {
+        request.site_boundary.unwrap_or_else(|| {
+            if previous.scope() == DiscoveryScope::SameSite {
+                previous.site_boundary()
+            } else {
+                SiteBoundary::default()
+            }
+        })
+    });
+    let authorized_subdomains = if site_boundary == Some(SiteBoundary::BaseDomain) {
+        request.authorized_subdomains.clone().unwrap_or_else(|| {
+            if previous.scope() == DiscoveryScope::SameSite {
+                previous.authorized_subdomains().to_vec()
+            } else {
+                Vec::new()
+            }
+        })
+    } else {
+        Vec::new()
+    };
+    let traversal_mode = request
+        .traversal_mode
+        .unwrap_or_else(|| previous.traversal_mode());
+    let max_pages = if traversal_mode == TraversalMode::Limited {
+        request.max_pages.or_else(|| previous.max_pages())
+    } else {
+        request.max_pages
+    };
+    let content_format = request
+        .content_format
+        .unwrap_or_else(|| previous.content_format());
+
+    DiscoveryConfiguration::new(
+        scope,
+        site_boundary,
+        authorized_subdomains,
+        traversal_mode,
+        max_pages,
+        content_format,
+    )
+    .map_err(UpdateSkillError::InvalidDiscoveryConfiguration)
 }
