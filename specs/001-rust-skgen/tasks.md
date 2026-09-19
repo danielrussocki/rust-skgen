@@ -92,7 +92,7 @@ Hecho cuando: El resultado contiene solo contenido extraído ordenado por págin
 RF: RF-5, RF-6.
 Hecho cuando: Tests distinguen skills gestionadas, no gestionadas, con metadatos ausentes e inválidos.
 
-- [ ] T24. Implementar creación transaccional de una skill en la ruta de salida especificada.
+- [x] T24. Implementar creación transaccional de una skill en la ruta de salida especificada.
 RF: RF-1, RF-2, RF-4.
 Hecho cuando: La creación publica contenido y metadatos completos bajo la ruta requerida y falla sin cambios si el destino ya existe.
 

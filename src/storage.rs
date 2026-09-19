@@ -3,6 +3,7 @@
 use std::{
     fs, io,
     path::{Path, PathBuf},
+    time::{SystemTime, SystemTimeError, UNIX_EPOCH},
 };
 
 use crate::{
@@ -12,6 +13,91 @@ use crate::{
 
 /// File containing metadata that identifies a skill managed by this generator.
 pub const METADATA_FILE_NAME: &str = "metadata.json";
+
+/// File containing the rendered managed skill content.
+pub const SKILL_FILE_NAME: &str = "SKILL.md";
+
+/// Publishes complete new skills without modifying an existing destination.
+pub struct TransactionalSkillCreator {
+    skills_root: PathBuf,
+}
+
+impl TransactionalSkillCreator {
+    /// Creates a publisher rooted at the supplied skills output directory.
+    pub fn new(skills_root: impl Into<PathBuf>) -> Self {
+        Self {
+            skills_root: skills_root.into(),
+        }
+    }
+
+    /// Writes a complete skill and metadata set, then publishes it as one directory rename.
+    pub fn create(
+        &self,
+        name: &SkillName,
+        content: &str,
+        metadata: &ManagedSkillMetadata,
+    ) -> Result<(), StorageError> {
+        let metadata = metadata
+            .to_json()
+            .map_err(StorageError::SerializeMetadata)?;
+        let destination = self.skills_root.join(name.as_str());
+
+        if destination.exists() {
+            return Err(StorageError::DestinationExists(destination));
+        }
+
+        fs::create_dir_all(&self.skills_root).map_err(StorageError::CreateSkillsRoot)?;
+        let pending = self.create_pending_directory(name)?;
+        let result = self.write_and_publish(&pending, &destination, content, &metadata);
+
+        if result.is_err() {
+            let _ = fs::remove_dir_all(&pending);
+        }
+
+        result
+    }
+
+    fn create_pending_directory(&self, name: &SkillName) -> Result<PathBuf, StorageError> {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(StorageError::ReadSystemClock)?
+            .as_nanos();
+
+        for attempt in 0..100 {
+            let pending = self
+                .skills_root
+                .join(format!(".{}.pending-{timestamp}-{attempt}", name.as_str()));
+            match fs::create_dir(&pending) {
+                Ok(()) => return Ok(pending),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(StorageError::CreatePendingDirectory(error)),
+            }
+        }
+
+        Err(StorageError::CreatePendingDirectory(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "could not allocate a unique pending skill directory",
+        )))
+    }
+
+    fn write_and_publish(
+        &self,
+        pending: &Path,
+        destination: &Path,
+        content: &str,
+        metadata: &str,
+    ) -> Result<(), StorageError> {
+        fs::write(pending.join(SKILL_FILE_NAME), content).map_err(StorageError::WriteContent)?;
+        fs::write(pending.join(METADATA_FILE_NAME), metadata)
+            .map_err(StorageError::WriteMetadata)?;
+
+        if destination.exists() {
+            return Err(StorageError::DestinationExists(destination.to_path_buf()));
+        }
+
+        fs::rename(pending, destination).map_err(StorageError::PublishSkill)
+    }
+}
 
 /// The result of reading metadata for a discovered skill directory.
 #[derive(Debug)]
@@ -122,6 +208,22 @@ impl SkillLocator {
 /// Error returned while locating skills or reading metadata from the filesystem.
 #[derive(Debug)]
 pub enum StorageError {
+    /// The skills root could not be created.
+    CreateSkillsRoot(io::Error),
+    /// The system clock could not provide a pending directory identifier.
+    ReadSystemClock(SystemTimeError),
+    /// A pending directory could not be created.
+    CreatePendingDirectory(io::Error),
+    /// The skill content could not be written to the pending directory.
+    WriteContent(io::Error),
+    /// The skill metadata could not be serialized.
+    SerializeMetadata(MetadataError),
+    /// The skill metadata could not be written to the pending directory.
+    WriteMetadata(io::Error),
+    /// The destination already exists and must not be overwritten during creation.
+    DestinationExists(PathBuf),
+    /// The complete pending skill could not be published.
+    PublishSkill(io::Error),
     /// The skills root could not be listed.
     ReadSkillsRoot(io::Error),
     /// Metadata for one skill could not be read.
@@ -131,6 +233,35 @@ pub enum StorageError {
 impl std::fmt::Display for StorageError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::CreateSkillsRoot(error) => {
+                write!(formatter, "failed to create skills root: {error}")
+            }
+            Self::ReadSystemClock(error) => {
+                write!(formatter, "failed to read system clock: {error}")
+            }
+            Self::CreatePendingDirectory(error) => {
+                write!(
+                    formatter,
+                    "failed to create pending skill directory: {error}"
+                )
+            }
+            Self::WriteContent(error) => {
+                write!(formatter, "failed to write skill content: {error}")
+            }
+            Self::SerializeMetadata(error) => {
+                write!(formatter, "failed to serialize metadata: {error}")
+            }
+            Self::WriteMetadata(error) => {
+                write!(formatter, "failed to write skill metadata: {error}")
+            }
+            Self::DestinationExists(path) => {
+                write!(
+                    formatter,
+                    "skill destination already exists: {}",
+                    path.display()
+                )
+            }
+            Self::PublishSkill(error) => write!(formatter, "failed to publish skill: {error}"),
             Self::ReadSkillsRoot(error) => write!(formatter, "failed to read skills root: {error}"),
             Self::ReadMetadata { path, error } => {
                 write!(
@@ -146,7 +277,15 @@ impl std::fmt::Display for StorageError {
 impl std::error::Error for StorageError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::ReadSkillsRoot(error) => Some(error),
+            Self::CreateSkillsRoot(error)
+            | Self::CreatePendingDirectory(error)
+            | Self::WriteContent(error)
+            | Self::WriteMetadata(error)
+            | Self::PublishSkill(error)
+            | Self::ReadSkillsRoot(error) => Some(error),
+            Self::ReadSystemClock(error) => Some(error),
+            Self::SerializeMetadata(error) => Some(error),
+            Self::DestinationExists(_) => None,
             Self::ReadMetadata { error, .. } => Some(error),
         }
     }
