@@ -259,3 +259,35 @@ Hecho cuando: `update` solicita confirmación por cada skill con huella discrepa
 - [x] T65. Aplicar el flujo de confirmación a las actualizaciones globales sin argumentos y verificar la matriz final.
 RF: RF-5, RF-6, RF-7.
 Hecho cuando: T62 y T64 pasan, y `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.
+
+- [x] T66. Añadir al modelo de configuración de descubrimiento la exigencia explícita de `robots.txt` con valor predeterminado desactivado.
+RF: RF-3.
+Hecho cuando: Tests deterministas verifican que la configuración acepta ambos valores y que, sin indicación de la persona usuaria, no exige `robots.txt`.
+
+- [x] T67. Ajustar la política de `robots.txt` para permitir su ausencia, inaccesibilidad o invalidez cuando no se exige, y fallar atómicamente cuando se exige.
+RF: RF-2, RF-3.
+Hecho cuando: Tests locales verifican que un `robots.txt` ausente, inaccesible o inválido permite descubrir en modo opcional y falla sin publicar contenido parcial en modo obligatorio; un archivo válido que prohíbe una URL falla en ambos modos.
+
+- [x] T68. Incorporar el parámetro de exigencia de `robots.txt` a los comandos `create` y `update`, incluida su validación en actualizaciones múltiples.
+RF: RF-3, RF-6.
+Hecho cuando: Tests de argumentos verifican el valor predeterminado, ambos valores explícitos y el rechazo de cambiar esta configuración al actualizar varias skills.
+
+- [x] T69. Persistir y validar la exigencia de `robots.txt` en los metadatos de una skill gestionada.
+RF: RF-4, RF-5, RF-6.
+Hecho cuando: Tests de serialización y deserialización verifican que el campo se escribe, se recupera y se rechaza cuando falta o tiene un valor inválido.
+
+- [x] T70. Propagar la exigencia de `robots.txt` por los servicios de creación y actualización, conservando la configuración guardada cuando no se solicite un cambio.
+RF: RF-3, RF-4, RF-5, RF-6.
+Hecho cuando: Tests de servicio verifican que la creación usa el valor solicitado, una actualización individual puede cambiarlo y una actualización sin cambios reutiliza el valor persistido.
+
+- [x] T71. Conectar la configuración de `robots.txt` en el ejecutable y añadir pruebas de integración para los dos modos de descubrimiento.
+RF: RF-1, RF-2, RF-3, RF-5, RF-6, RF-7.
+Hecho cuando: Un servidor local sin `robots.txt` permite `create` y `update` por defecto, los rechaza cuando se exige, conserva las skills previas ante el rechazo y respeta una prohibición de un archivo válido en ambos modos.
+
+- [ ] T72. Actualizar la matriz de trazabilidad con las cláusulas y casos límite de `robots.txt` opcional.
+RF: RF-3, RF-4, RF-5, RF-6.
+Hecho cuando: `docs/traceability.md` referencia pruebas deterministas para valor predeterminado, exigencia explícita, ausencia o invalidez, prohibición válida, persistencia y actualización individual o múltiple.
+
+- [ ] T73. Ejecutar las verificaciones finales y comprobar la trazabilidad de los requisitos y casos límite modificados.
+RF: RF-1 a RF-7.
+Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y cada cláusula nueva de RF-3, RF-4 y RF-6 tiene una prueba identificable.

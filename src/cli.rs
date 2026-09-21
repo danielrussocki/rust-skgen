@@ -162,6 +162,8 @@ pub struct CreateArguments {
     pub max_pages: Option<usize>,
     /// Rendered content format.
     pub content_format: ContentFormat,
+    /// Whether robots.txt must be available and valid.
+    pub requires_robots_txt: bool,
     /// Optional HTTP user agent.
     pub user_agent: Option<String>,
 }
@@ -187,6 +189,8 @@ pub struct UpdateArguments {
     pub max_pages: Option<usize>,
     /// Optional replacement content format.
     pub content_format: Option<ContentFormat>,
+    /// Optional replacement robots.txt requirement.
+    pub requires_robots_txt: Option<bool>,
     /// Optional replacement HTTP user agent.
     pub user_agent: Option<String>,
 }
@@ -202,6 +206,7 @@ impl UpdateArguments {
             || self.traversal.is_some()
             || self.max_pages.is_some()
             || self.content_format.is_some()
+            || self.requires_robots_txt.is_some()
             || self.user_agent.is_some()
     }
 }
@@ -239,6 +244,8 @@ struct RawCreateArguments {
     content_format: ContentFormat,
     #[arg(long)]
     user_agent: Option<String>,
+    #[arg(long = "require-robots-txt", default_value_t = false, action = clap::ArgAction::Set)]
+    requires_robots_txt: bool,
 }
 
 #[derive(Args)]
@@ -263,6 +270,8 @@ struct RawUpdateArguments {
     content_format: Option<ContentFormat>,
     #[arg(long)]
     user_agent: Option<String>,
+    #[arg(long = "require-robots-txt", action = clap::ArgAction::Set)]
+    requires_robots_txt: Option<bool>,
 }
 
 impl TryFrom<RawCli> for Cli {
@@ -290,6 +299,7 @@ impl TryFrom<RawCreateArguments> for CreateArguments {
             value.traversal,
             value.max_pages,
             value.content_format,
+            value.requires_robots_txt,
         )
         .map_err(configuration_error)?;
 
@@ -303,6 +313,7 @@ impl TryFrom<RawCreateArguments> for CreateArguments {
             max_pages: configuration.max_pages(),
             content_format: configuration.content_format(),
             user_agent: value.user_agent,
+            requires_robots_txt: configuration.requires_robots_txt(),
         })
     }
 }
@@ -367,6 +378,7 @@ impl TryFrom<RawUpdateArguments> for UpdateArguments {
             max_pages,
             content_format: value.content_format,
             user_agent: value.user_agent,
+            requires_robots_txt: value.requires_robots_txt,
         };
 
         if arguments.has_changes() && arguments.skill_names.len() != 1 {

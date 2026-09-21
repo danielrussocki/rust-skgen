@@ -12,6 +12,7 @@ fn metadata_for(content: &str) -> ManagedSkillMetadata {
         TraversalMode::All,
         None,
         ContentFormat::GuideWithReferences,
+        false,
     )
     .unwrap();
 

@@ -68,6 +68,7 @@ fn run(cli: Cli) -> io::Result<u8> {
                 arguments.traversal,
                 arguments.max_pages,
                 arguments.content_format,
+                arguments.requires_robots_txt,
             )
             .map_err(io::Error::other)?;
             let request = CreateSkillRequest::new(
@@ -77,7 +78,7 @@ fn run(cli: Cli) -> io::Result<u8> {
             );
             let publisher = TransactionalSkillCreator::new(skills_root);
             let policy = CombinedCrawlPolicy::new(
-                RobotsTxtPolicy::new(fetcher.clone(), user_agent),
+                RobotsTxtPolicy::new(fetcher.clone(), user_agent, arguments.requires_robots_txt),
                 AccessConditions::default(),
             );
             let output = match create_skill(request, &fetcher, &policy, &publisher) {
@@ -101,7 +102,11 @@ fn run(cli: Cli) -> io::Result<u8> {
             ))
             .map_err(io::Error::other)?;
             let policy = CombinedCrawlPolicy::new(
-                RobotsTxtPolicy::new(fetcher.clone(), user_agent),
+                RobotsTxtPolicy::new(
+                    fetcher.clone(),
+                    user_agent,
+                    arguments.requires_robots_txt.unwrap_or(false),
+                ),
                 AccessConditions::default(),
             );
             let publisher = TransactionalSkillCreator::new(&skills_root);
@@ -191,6 +196,9 @@ fn update_changes(arguments: &rust_skgen::cli::UpdateArguments) -> UpdateSkillCh
     }
     if let Some(content_format) = arguments.content_format {
         changes = changes.with_content_format(content_format);
+    }
+    if let Some(requires_robots_txt) = arguments.requires_robots_txt {
+        changes = changes.with_requires_robots_txt(requires_robots_txt);
     }
     changes
 }

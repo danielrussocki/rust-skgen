@@ -54,6 +54,7 @@ fn valid_metadata() -> ManagedSkillMetadata {
         TraversalMode::All,
         None,
         ContentFormat::GuideWithReferences,
+        false,
     )
     .unwrap();
 

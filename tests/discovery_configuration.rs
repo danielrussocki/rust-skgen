@@ -1,5 +1,6 @@
 use rust_skgen::domain::{
-    ContentFormat, DiscoveryScope, SiteBoundary, SourceUrl, SourceUrlError, TraversalMode,
+    ContentFormat, DiscoveryConfiguration, DiscoveryScope, SiteBoundary, SourceUrl, SourceUrlError,
+    TraversalMode,
 };
 
 #[test]
@@ -72,4 +73,33 @@ fn exposes_every_supported_discovery_value() {
     assert_eq!(boundaries.len(), 3);
     assert_eq!(traversal_modes.len(), 3);
     assert_eq!(content_formats.len(), 2);
+}
+
+#[test]
+fn robots_txt_is_optional_by_default_and_can_be_explicitly_required() {
+    let optional = DiscoveryConfiguration::default();
+    let required = DiscoveryConfiguration::new(
+        DiscoveryScope::SameSite,
+        None,
+        Vec::new(),
+        TraversalMode::All,
+        None,
+        ContentFormat::GuideWithReferences,
+        true,
+    )
+    .unwrap_or_else(|error| panic!("expected valid required robots configuration: {error}"));
+    let explicitly_optional = DiscoveryConfiguration::new(
+        DiscoveryScope::SameSite,
+        None,
+        Vec::new(),
+        TraversalMode::All,
+        None,
+        ContentFormat::GuideWithReferences,
+        false,
+    )
+    .unwrap_or_else(|error| panic!("expected valid optional robots configuration: {error}"));
+
+    assert!(!optional.requires_robots_txt());
+    assert!(required.requires_robots_txt());
+    assert!(!explicitly_optional.requires_robots_txt());
 }

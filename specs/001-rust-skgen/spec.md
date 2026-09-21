@@ -47,14 +47,18 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Cuando se alcance el máximo de páginas, la CLI deberá generar la skill con las páginas extraídas hasta ese momento, siempre que no se haya producido otro fallo.
 - La CLI deberá considerar iguales dos URLs que difieran solo por fragmento o parámetros de consulta y no deberá extraerlas más de una vez.
 - Cuando la URL inicial sea extraíble, la CLI deberá incluirla siempre en la skill.
-- Si la URL inicial o una página relacionada responde con una redirección, no puede extraerse, está prohibida por `robots.txt` o por las condiciones de acceso aplicables, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
+- Cuando la persona usuaria cree o actualice una skill, la CLI deberá permitir configurar si exige la existencia de un archivo `robots.txt` válido durante el descubrimiento.
+- Si la persona usuaria no configura la exigencia de `robots.txt`, la CLI no deberá requerir que el sitio publique ese archivo para descubrir documentación relacionada.
+- Cuando la persona usuaria configure la exigencia de `robots.txt`, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial si no encuentra o no puede validar un archivo `robots.txt` aplicable.
+- Cuando el sitio publique un archivo `robots.txt` válido, la CLI deberá respetar sus reglas aplicables independientemente de que la persona usuaria haya configurado su exigencia.
+- Si la URL inicial o una página relacionada responde con una redirección, no puede extraerse, está prohibida por un archivo `robots.txt` válido o por las condiciones de acceso aplicables, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
 - Si no se encuentra ninguna página de documentación válida para incluir, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
 
 ### RF-4. Contenido y procedencia de la skill
 
 - Cuando la extracción finalice correctamente, la CLI deberá generar una skill a partir de contenido extraído de las páginas incluidas.
 - La skill deberá preservar las URL de origen y atribuir el contenido a sus fuentes.
-- La skill deberá conservar metadatos validables que identifiquen que fue generada por la CLI y permitan recuperar la URL de origen, el alcance, el límite de sitio, el modo de recorrido, el máximo de páginas y el formato de contenido para actualizaciones posteriores.
+- La skill deberá conservar metadatos validables que identifiquen que fue generada por la CLI y permitan recuperar la URL de origen, el alcance, el límite de sitio, el modo de recorrido, el máximo de páginas, la exigencia de `robots.txt` y el formato de contenido para actualizaciones posteriores.
 - Cuando la persona usuaria no indique un formato de contenido, la CLI deberá generar una guía con referencias que incluya el objetivo de la librería, instrucciones para usar la skill, contenido extraído organizado y la URL de cada fuente.
 - Cuando la persona usuaria seleccione el formato de contenido organizado, la CLI deberá generar únicamente el contenido extraído organizado por página o tema y las URL de sus fuentes.
 - La CLI no deberá presentar como documentación contenido que no se haya extraído de las fuentes incluidas.
@@ -69,10 +73,10 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 ### RF-6. Actualización dirigida y cambios de configuración
 
 - Cuando la persona usuaria indique una o varias skills para actualizar, la CLI deberá actualizar únicamente las skills indicadas que hayan sido generadas previamente por la CLI.
-- Cuando la persona usuaria indique un nuevo nombre, URL, alcance, límite de sitio, modo de recorrido, máximo de páginas o formato de contenido para una única skill seleccionada, la CLI deberá usar los valores indicados en esa actualización y conservarlos para las siguientes.
+- Cuando la persona usuaria indique un nuevo nombre, URL, alcance, límite de sitio, modo de recorrido, máximo de páginas, exigencia de `robots.txt` o formato de contenido para una única skill seleccionada, la CLI deberá usar los valores indicados en esa actualización y conservarlos para las siguientes.
 - Si el nuevo nombre no cumple las reglas de slug y longitud de RF-1, la CLI deberá rechazar la actualización y no deberá modificar la skill.
 - Si el nuevo nombre coincide exactamente con el nombre actual de la skill, la CLI deberá actualizarla normalmente.
-- Cuando la persona usuaria seleccione varias skills para actualizar y proporcione cambios de nombre, URL, alcance, límite de sitio, modo de recorrido, máximo de páginas o formato de contenido, la CLI deberá rechazar toda la operación y no deberá modificar ninguna skill.
+- Cuando la persona usuaria seleccione varias skills para actualizar y proporcione cambios de nombre, URL, alcance, límite de sitio, modo de recorrido, máximo de páginas, exigencia de `robots.txt` o formato de contenido, la CLI deberá rechazar toda la operación y no deberá modificar ninguna skill.
 - Cuando la persona usuaria seleccione varias skills para actualizar sin cambios de configuración, la CLI deberá actualizar cada skill válida con su configuración existente.
 - Si una skill indicada no existe o no fue generada por la CLI, la CLI deberá reportar un fallo para esa skill y continuar con las restantes válidas.
 - Si los metadatos de una skill gestionada faltan, son inválidos o no coinciden con su contenido, la CLI deberá solicitar confirmación para reconstruirlos y actualizar la skill.
@@ -87,7 +91,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 
 ## Requisitos no funcionales
 
-- La CLI deberá respetar `robots.txt`, los términos de uso aplicables y los límites de acceso de cada sitio.
+- La CLI deberá respetar las reglas aplicables de todo archivo `robots.txt` válido que encuentre, los términos de uso aplicables y los límites de acceso de cada sitio; salvo configuración expresa, la ausencia de `robots.txt` no impedirá el descubrimiento.
 - La CLI deberá identificar sus solicitudes con un `User-Agent` configurable, aplicar tiempos de espera, reintentos acotados y limitación de concurrencia.
 - La CLI deberá tratar HTML, URLs y contenido remoto como no confiables y no deberá permitir que determinen rutas de escritura fuera del directorio de salida definido.
 - Para iguales fuentes y configuración, la generación deberá producir resultados deterministas.
@@ -108,6 +112,8 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 ## Casos límite
 
 - La URL de origen o una URL relacionada redirige, no responde, responde con un error HTTP, está prohibida por las condiciones de acceso aplicables o devuelve contenido no apto para extraer documentación.
+- El sitio no publica `robots.txt`, publica un archivo no válido o este no puede obtenerse: el descubrimiento continúa si no se exige su existencia y falla sin cambios parciales si se exige.
+- Un archivo `robots.txt` válido prohíbe acceder a la URL inicial o a una página relacionada, tanto si se exige su existencia como si no.
 - Una URL relacionada sale del alcance seleccionado, apunta a un subdominio no autorizado, vuelve a una página ya visitada o difiere de una URL ya visitada solo por fragmento o parámetros de consulta.
 - El recorrido con límite configurable recibe cero, un valor negativo o un valor no numérico, o alcanza su máximo de páginas.
 - El alcance elegido no encuentra páginas de documentación válidas, aunque la URL inicial sea accesible.
@@ -116,7 +122,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - La persona usuaria selecciona una skill inexistente o una que no fue generada por la CLI.
 - No hay skills generadas por la CLI cuando se solicita una actualización sin argumentos.
 - Una actualización cambia el nombre de una skill y falla antes de completarse.
-- Se solicitan cambios de nombre, URL, alcance, límite de sitio, modo de recorrido, máximo de páginas o formato al actualizar varias skills.
+- Se solicitan cambios de nombre, URL, alcance, límite de sitio, modo de recorrido, máximo de páginas, exigencia de `robots.txt` o formato al actualizar varias skills.
 - Una skill tiene metadatos faltantes, inválidos o que no coinciden con su contenido, y la persona usuaria acepta o rechaza reconstruirlos.
 - Una skill gestionada fue modificada manualmente antes de actualizarla.
 - La escritura falla o dos ejecuciones intentan modificar la misma skill simultáneamente.

@@ -134,6 +134,7 @@ pub struct UpdateSkillChanges {
     traversal_mode: Option<TraversalMode>,
     max_pages: Option<usize>,
     content_format: Option<ContentFormat>,
+    requires_robots_txt: Option<bool>,
 }
 
 impl UpdateSkillRequest {
@@ -198,6 +199,12 @@ impl UpdateSkillChanges {
         self
     }
 
+    /// Changes whether robots.txt is required during discovery.
+    pub fn with_requires_robots_txt(mut self, requires_robots_txt: bool) -> Self {
+        self.requires_robots_txt = Some(requires_robots_txt);
+        self
+    }
+
     fn has_changes(&self) -> bool {
         self.new_name.is_some()
             || self.source_url.is_some()
@@ -207,6 +214,7 @@ impl UpdateSkillChanges {
             || self.traversal_mode.is_some()
             || self.max_pages.is_some()
             || self.content_format.is_some()
+            || self.requires_robots_txt.is_some()
     }
 }
 
@@ -232,6 +240,12 @@ impl UpdateSkillRequest {
     /// Changes the same-site boundary.
     pub fn with_site_boundary(mut self, site_boundary: SiteBoundary) -> Self {
         self.changes = self.changes.with_site_boundary(site_boundary);
+        self
+    }
+
+    /// Changes whether robots.txt is required during discovery.
+    pub fn with_requires_robots_txt(mut self, requires_robots_txt: bool) -> Self {
+        self.changes = self.changes.with_requires_robots_txt(requires_robots_txt);
         self
     }
 
@@ -697,6 +711,9 @@ fn updated_discovery_configuration(
         traversal_mode,
         max_pages,
         content_format,
+        changes
+            .requires_robots_txt
+            .unwrap_or_else(|| previous.requires_robots_txt()),
     )
     .map_err(UpdateSkillError::InvalidDiscoveryConfiguration)
 }

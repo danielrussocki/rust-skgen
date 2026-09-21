@@ -27,6 +27,7 @@ fn uses_one_hundred_pages_when_limited_traversal_has_no_maximum() {
         TraversalMode::Limited,
         None,
         ContentFormat::OrganizedContent,
+        false,
     );
 
     assert!(configuration.is_ok());
@@ -47,6 +48,7 @@ fn accepts_a_positive_maximum_for_limited_traversal() {
         TraversalMode::Limited,
         Some(25),
         ContentFormat::default(),
+        false,
     );
 
     assert!(configuration.is_ok());
@@ -63,6 +65,7 @@ fn rejects_zero_as_a_limited_traversal_maximum() {
         TraversalMode::Limited,
         Some(0),
         ContentFormat::default(),
+        false,
     );
 
     assert_eq!(
@@ -80,6 +83,7 @@ fn rejects_a_maximum_for_non_limited_traversal() {
         TraversalMode::All,
         Some(25),
         ContentFormat::default(),
+        false,
     );
 
     assert_eq!(
@@ -97,6 +101,7 @@ fn rejects_a_site_boundary_outside_same_site_scope() {
         TraversalMode::default(),
         None,
         ContentFormat::default(),
+        false,
     );
 
     assert_eq!(
@@ -114,6 +119,7 @@ fn rejects_authorized_subdomains_without_the_base_domain_boundary() {
         TraversalMode::default(),
         None,
         ContentFormat::default(),
+        false,
     );
 
     assert_eq!(

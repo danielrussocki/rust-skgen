@@ -13,6 +13,7 @@ fn metadata() -> ManagedSkillMetadata {
         TraversalMode::Limited,
         Some(25),
         ContentFormat::OrganizedContent,
+        true,
     )
     .unwrap();
 
@@ -38,12 +39,28 @@ fn serializes_every_required_configuration_field() {
         serde_json::json!(["api.docs.example.com"])
     );
     assert_eq!(value["discovery"]["traversal"]["mode"], "limited");
+    assert_eq!(value["discovery"]["require_robots_txt"], true);
     assert_eq!(value["discovery"]["traversal"]["max_pages"], 25);
     assert_eq!(value["content_format"], "organized-content");
     assert_eq!(
         value["content_digest"],
         "sha256:7b50fcd0d5f3a4c8b3e53b7a8585a35e42f2cfc0cb37360e6f4ecaa7f2e7166e"
     );
+}
+
+#[test]
+fn rejects_metadata_without_or_with_an_invalid_robots_requirement() {
+    let missing = metadata()
+        .to_json()
+        .unwrap()
+        .replace(",\"require_robots_txt\":true", "");
+    let invalid = metadata().to_json().unwrap().replace(
+        "\"require_robots_txt\":true",
+        "\"require_robots_txt\":\"yes\"",
+    );
+
+    assert!(ManagedSkillMetadata::from_json(&missing).is_err());
+    assert!(ManagedSkillMetadata::from_json(&invalid).is_err());
 }
 
 #[test]

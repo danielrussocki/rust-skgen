@@ -270,6 +270,7 @@ pub struct DiscoveryConfiguration {
     traversal_mode: TraversalMode,
     max_pages: Option<usize>,
     content_format: ContentFormat,
+    requires_robots_txt: bool,
 }
 
 impl DiscoveryConfiguration {
@@ -284,6 +285,7 @@ impl DiscoveryConfiguration {
         traversal_mode: TraversalMode,
         max_pages: Option<usize>,
         content_format: ContentFormat,
+        requires_robots_txt: bool,
     ) -> Result<Self, DiscoveryConfigurationError> {
         if scope != DiscoveryScope::SameSite && site_boundary.is_some() {
             return Err(DiscoveryConfigurationError::SiteBoundaryRequiresSameSiteScope);
@@ -315,6 +317,7 @@ impl DiscoveryConfiguration {
             traversal_mode,
             max_pages,
             content_format,
+            requires_robots_txt,
         })
     }
 
@@ -346,6 +349,11 @@ impl DiscoveryConfiguration {
     /// Returns the selected content format.
     pub fn content_format(&self) -> ContentFormat {
         self.content_format
+    }
+
+    /// Returns whether discovery must successfully retrieve and evaluate robots.txt.
+    pub fn requires_robots_txt(&self) -> bool {
+        self.requires_robots_txt
     }
 }
 

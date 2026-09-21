@@ -33,7 +33,36 @@ fn create_uses_the_specified_defaults() {
     assert_eq!(arguments.traversal, TraversalMode::All);
     assert_eq!(arguments.max_pages, None);
     assert_eq!(arguments.content_format, ContentFormat::GuideWithReferences);
+    assert!(!arguments.requires_robots_txt);
     assert_eq!(arguments.user_agent, None);
+}
+
+#[test]
+fn accepts_explicit_robots_txt_requirement_for_create_and_single_update() {
+    let create = Cli::try_parse_from([
+        "rust-skgen",
+        "create",
+        "https://docs.example.test/start",
+        "example-skill",
+        "--require-robots-txt=true",
+    ])
+    .unwrap();
+    let update = Cli::try_parse_from([
+        "rust-skgen",
+        "update",
+        "example-skill",
+        "--require-robots-txt=false",
+    ])
+    .unwrap();
+
+    let Command::Create(create) = create.command else {
+        panic!("expected create command");
+    };
+    let Command::Update(update) = update.command else {
+        panic!("expected update command");
+    };
+    assert!(create.requires_robots_txt);
+    assert_eq!(update.requires_robots_txt, Some(false));
 }
 
 #[test]
@@ -204,6 +233,12 @@ fn update_rejects_changes_without_exactly_one_selected_skill() {
             "second-skill",
             "--format",
             "organized-content",
+        ],
+        vec![
+            "update",
+            "first-skill",
+            "second-skill",
+            "--require-robots-txt=true",
         ],
         vec![
             "update",

@@ -75,6 +75,8 @@ pub enum RobotsError {
     Fetch(FetchError),
     /// The robots document did not return a successful HTTP status.
     UnexpectedStatus(u16),
+    /// The robots document does not contain a valid user-agent directive.
+    InvalidDocument,
 }
 
 impl std::fmt::Display for RobotsError {
@@ -88,6 +90,7 @@ impl std::fmt::Display for RobotsError {
                     "robots.txt returned unexpected HTTP status {status}"
                 )
             }
+            Self::InvalidDocument => formatter.write_str("invalid robots.txt document"),
         }
     }
 }
@@ -97,7 +100,7 @@ impl std::error::Error for RobotsError {
         match self {
             Self::InvalidRobotsUrl(error) => Some(error),
             Self::Fetch(error) => Some(error),
-            Self::UnexpectedStatus(_) => None,
+            Self::UnexpectedStatus(_) | Self::InvalidDocument => None,
         }
     }
 }
@@ -106,14 +109,16 @@ impl std::error::Error for RobotsError {
 pub struct RobotsTxtPolicy<F> {
     fetcher: F,
     user_agent: String,
+    requires_robots_txt: bool,
 }
 
 impl<F> RobotsTxtPolicy<F> {
     /// Creates a policy evaluator for the supplied crawler user agent.
-    pub fn new(fetcher: F, user_agent: impl Into<String>) -> Self {
+    pub fn new(fetcher: F, user_agent: impl Into<String>, requires_robots_txt: bool) -> Self {
         Self {
             fetcher,
             user_agent: user_agent.into(),
+            requires_robots_txt,
         }
     }
 }
@@ -123,12 +128,24 @@ impl<F: DocumentFetcher> CrawlPolicy for RobotsTxtPolicy<F> {
         let robots_url = url
             .join("/robots.txt")
             .map_err(RobotsError::InvalidRobotsUrl)?;
-        let document = self.fetcher.fetch(robots_url).map_err(RobotsError::Fetch)?;
+        let document = match self.fetcher.fetch(robots_url) {
+            Ok(document) => document,
+            Err(_) if !self.requires_robots_txt => return Ok(true),
+            Err(error) => return Err(RobotsError::Fetch(error)),
+        };
         if !(200..300).contains(&document.status()) {
-            return Err(RobotsError::UnexpectedStatus(document.status()));
+            return if self.requires_robots_txt {
+                Err(RobotsError::UnexpectedStatus(document.status()))
+            } else {
+                Ok(true)
+            };
         }
 
-        Ok(RobotsRules::parse(document.body()).allows(url, &self.user_agent))
+        match RobotsRules::parse(document.body()) {
+            Ok(rules) => Ok(rules.allows(url, &self.user_agent)),
+            Err(_) if !self.requires_robots_txt => Ok(true),
+            Err(error) => Err(error),
+        }
     }
 }
 
@@ -138,7 +155,7 @@ struct RobotsRules {
 }
 
 impl RobotsRules {
-    fn parse(document: &str) -> Self {
+    fn parse(document: &str) -> Result<Self, RobotsError> {
         let mut groups = Vec::new();
         let mut agents = Vec::new();
         let mut rules = Vec::new();
@@ -176,7 +193,9 @@ impl RobotsRules {
             groups.push(RobotsGroup { agents, rules });
         }
 
-        Self { groups }
+        (!groups.is_empty())
+            .then_some(Self { groups })
+            .ok_or(RobotsError::InvalidDocument)
     }
 
     fn allows(&self, url: &Url, user_agent: &str) -> bool {

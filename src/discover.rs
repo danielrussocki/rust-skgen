@@ -434,6 +434,7 @@ mod tests {
             traversal_mode,
             max_pages,
             ContentFormat::GuideWithReferences,
+            false,
         )
         .expect("test discovery configuration must be valid")
     }
@@ -657,6 +658,7 @@ mod tests {
             TraversalMode::All,
             None,
             ContentFormat::GuideWithReferences,
+            false,
         )
         .expect("navigation configuration must be valid");
 

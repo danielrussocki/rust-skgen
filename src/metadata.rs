@@ -163,6 +163,7 @@ struct RawDiscoveryConfiguration {
     site_boundary: Option<RawSiteBoundary>,
     allowed_subdomains: Vec<String>,
     traversal: RawTraversal,
+    require_robots_txt: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -225,6 +226,7 @@ impl From<&ManagedSkillMetadata> for RawMetadata {
                     mode: discovery.traversal_mode().into(),
                     max_pages: discovery.max_pages(),
                 },
+                require_robots_txt: discovery.requires_robots_txt(),
             },
             content_format: discovery.content_format().into(),
             content_digest: metadata.content_digest().to_owned(),
@@ -276,6 +278,7 @@ impl TryFrom<RawMetadata> for ManagedSkillMetadata {
             raw.discovery.traversal.mode.into(),
             raw.discovery.traversal.max_pages,
             raw.content_format.into(),
+            raw.discovery.require_robots_txt,
         )
         .map_err(MetadataError::InvalidDiscoveryConfiguration)?;
 
