@@ -12,8 +12,8 @@ use rust_skgen::{
     fetch::{FetchConfiguration, HttpDocumentFetcher},
     policy::{AccessConditions, CombinedCrawlPolicy, RobotsTxtPolicy},
     service::{
-        CreateSkillRequest, RebuildConfirmation, UpdateSkillChanges, create_skill, update_skills,
-        update_skills_with_changes_and_confirmation,
+        CreateSkillRequest, RebuildConfirmation, UpdateSkillChanges, create_skill,
+        update_skills_with_changes_and_confirmation, update_skills_with_confirmation,
     },
     storage::{SkillLocator, TransactionalSkillCreator},
 };
@@ -105,7 +105,7 @@ fn run(cli: Cli) -> io::Result<u8> {
                 AccessConditions::default(),
             );
             let publisher = TransactionalSkillCreator::new(&skills_root);
-            let result = if arguments.has_changes() {
+            let result = if !arguments.skill_names.is_empty() {
                 let changes = update_changes(&arguments);
                 let confirmation = InteractiveRebuildConfirmation;
                 update_skills_with_changes_and_confirmation(
@@ -118,9 +118,11 @@ fn run(cli: Cli) -> io::Result<u8> {
                 )
                 .map_err(io::Error::other)?
             } else {
-                update_skills(
-                    (!arguments.skill_names.is_empty()).then_some(arguments.skill_names.as_slice()),
+                let confirmation = InteractiveRebuildConfirmation;
+                update_skills_with_confirmation(
+                    None,
                     &SkillLocator::new(&skills_root),
+                    &confirmation,
                     &fetcher,
                     &policy,
                     &publisher,

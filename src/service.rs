@@ -419,15 +419,7 @@ pub fn update_skills<F: DocumentFetcher, P: CrawlPolicy>(
     policy: &P,
     publisher: &TransactionalSkillCreator,
 ) -> Result<UpdateSkillsResult, StorageError> {
-    let names = match selection {
-        Some(names) => names.to_vec(),
-        None => locator
-            .locate()?
-            .into_iter()
-            .filter(|skill| skill.is_managed())
-            .map(|skill| skill.name().clone())
-            .collect(),
-    };
+    let names = selected_skill_names(selection, locator)?;
     let outcomes = names
         .into_iter()
         .map(|name| UpdateSkillsOutcome {
@@ -442,6 +434,53 @@ pub fn update_skills<F: DocumentFetcher, P: CrawlPolicy>(
         .collect();
 
     Ok(UpdateSkillsResult { outcomes })
+}
+
+/// Updates every managed skill or an explicitly directed selection after requesting confirmation
+/// for each skill whose metadata must be rebuilt.
+pub fn update_skills_with_confirmation<
+    F: DocumentFetcher,
+    P: CrawlPolicy,
+    C: RebuildConfirmation,
+>(
+    selection: Option<&[SkillName]>,
+    locator: &SkillLocator,
+    confirmation: &C,
+    fetcher: &F,
+    policy: &P,
+    publisher: &TransactionalSkillCreator,
+) -> Result<UpdateSkillsResult, StorageError> {
+    let names = selected_skill_names(selection, locator)?;
+    let outcomes = names
+        .into_iter()
+        .map(|name| UpdateSkillsOutcome {
+            result: update_skill_with_confirmation(
+                UpdateSkillRequest::new(name.clone()),
+                confirmation,
+                fetcher,
+                policy,
+                publisher,
+            ),
+            name,
+        })
+        .collect();
+
+    Ok(UpdateSkillsResult { outcomes })
+}
+
+fn selected_skill_names(
+    selection: Option<&[SkillName]>,
+    locator: &SkillLocator,
+) -> Result<Vec<SkillName>, StorageError> {
+    match selection {
+        Some(names) => Ok(names.to_vec()),
+        None => Ok(locator
+            .locate()?
+            .into_iter()
+            .filter(|skill| skill.is_managed())
+            .map(|skill| skill.name().clone())
+            .collect()),
+    }
 }
 
 /// Updates a directed selection, applying configuration changes only when one skill is selected.

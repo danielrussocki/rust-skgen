@@ -243,3 +243,19 @@ Hecho cuando: Cada cláusula funcional y caso límite de la spec referencia al m
 - [x] T61. Ejecutar las verificaciones finales de formato, lint y pruebas tras cerrar las tareas pendientes.
 RF: RF-1 a RF-7.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.
+
+- [x] T62. Añadir pruebas de integración para la confirmación de una skill con huella discrepante en una actualización dirigida sin cambios de configuración.
+RF: RF-5, RF-6, RF-7.
+Hecho cuando: `update <skill>` con entrada `y` reconstruye y actualiza la skill, mientras que `n` y EOF conservan su contenido y finalizan con el resultado individual esperado.
+
+- [x] T63. Usar el flujo de confirmación de reconstrucción en las actualizaciones dirigidas sin cambios de configuración.
+RF: RF-5, RF-6.
+Hecho cuando: El comando `update <skill>` solicita confirmación ante una huella discrepante y aplica exactamente el comportamiento cubierto por T62.
+
+- [x] T64. Añadir pruebas de integración para la confirmación durante una actualización global sin argumentos.
+RF: RF-5, RF-6, RF-7.
+Hecho cuando: `update` solicita confirmación por cada skill con huella discrepante, actualiza las aceptadas, conserva las rechazadas y comunica cada resultado con código 1 si alguna falla.
+
+- [x] T65. Aplicar el flujo de confirmación a las actualizaciones globales sin argumentos y verificar la matriz final.
+RF: RF-5, RF-6, RF-7.
+Hecho cuando: T62 y T64 pasan, y `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.

@@ -529,6 +529,148 @@ fn update_rebuild_confirmation_accepts_y_and_preserves_skills_for_n_or_eof() {
 }
 
 #[test]
+fn update_without_changes_confirms_a_mismatched_content_digest_for_a_selected_skill() {
+    let accepted_directory = TemporaryDirectory::new();
+    let (source_url, server) = documentation_server();
+    create_manually_modified_managed_skill(&accepted_directory.path, "accepted-docs", &source_url);
+
+    let mut accepted = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&accepted_directory.path)
+        .args(["update", "accepted-docs"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    accepted.stdin.as_mut().unwrap().write_all(b"y\n").unwrap();
+    drop(accepted.stdin.take());
+    let accepted = accepted.wait_with_output().unwrap();
+
+    assert_eq!(accepted.status.code(), Some(0));
+    assert!(
+        String::from_utf8(accepted.stderr)
+            .unwrap()
+            .contains("Rebuild metadata and update this skill? [y/N]")
+    );
+    assert!(
+        String::from_utf8(accepted.stdout)
+            .unwrap()
+            .contains("Updated skill: accepted-docs")
+    );
+    assert_ne!(
+        fs::read_to_string(
+            accepted_directory
+                .path
+                .join(".agents/skills/accepted-docs/SKILL.md")
+        )
+        .unwrap(),
+        "# Manually changed skill\n"
+    );
+    server.join().unwrap();
+
+    for response in [Some(b"n\n".as_slice()), None] {
+        let rejected_directory = TemporaryDirectory::new();
+        create_manually_modified_managed_skill(
+            &rejected_directory.path,
+            "rejected-docs",
+            "http://127.0.0.1:1/unreachable",
+        );
+        let mut command = Command::new(env!("CARGO_BIN_EXE_rust-skgen"));
+        command
+            .current_dir(&rejected_directory.path)
+            .args(["update", "rejected-docs"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut rejected = command.spawn().unwrap();
+        if let Some(response) = response {
+            rejected
+                .stdin
+                .as_mut()
+                .unwrap()
+                .write_all(response)
+                .unwrap();
+        }
+        drop(rejected.stdin.take());
+        let rejected = rejected.wait_with_output().unwrap();
+
+        assert_eq!(rejected.status.code(), Some(1));
+        assert!(
+            String::from_utf8(rejected.stderr)
+                .unwrap()
+                .contains("Rebuild metadata and update this skill? [y/N]")
+        );
+        assert_eq!(
+            fs::read_to_string(
+                rejected_directory
+                    .path
+                    .join(".agents/skills/rejected-docs/SKILL.md")
+            )
+            .unwrap(),
+            "# Manually changed skill\n"
+        );
+    }
+}
+
+#[test]
+fn update_without_names_confirms_each_mismatched_content_digest() {
+    let working_directory = TemporaryDirectory::new();
+    let (source_url, server) = documentation_server();
+    create_manually_modified_managed_skill(&working_directory.path, "accepted-docs", &source_url);
+    create_manually_modified_managed_skill(
+        &working_directory.path,
+        "rejected-docs",
+        "http://127.0.0.1:1/unreachable",
+    );
+
+    let mut update = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .arg("update")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    update.stdin.as_mut().unwrap().write_all(b"y\nn\n").unwrap();
+    drop(update.stdin.take());
+    let update = update.wait_with_output().unwrap();
+
+    assert_eq!(update.status.code(), Some(1));
+    let standard_error = String::from_utf8(update.stderr).unwrap();
+    assert_eq!(
+        standard_error
+            .matches("Rebuild metadata and update this skill? [y/N]")
+            .count(),
+        2
+    );
+    assert!(standard_error.contains("Failed skill: rejected-docs"));
+    assert!(
+        String::from_utf8(update.stdout)
+            .unwrap()
+            .contains("Updated skill: accepted-docs")
+    );
+    assert_ne!(
+        fs::read_to_string(
+            working_directory
+                .path
+                .join(".agents/skills/accepted-docs/SKILL.md")
+        )
+        .unwrap(),
+        "# Manually changed skill\n"
+    );
+    assert_eq!(
+        fs::read_to_string(
+            working_directory
+                .path
+                .join(".agents/skills/rejected-docs/SKILL.md")
+        )
+        .unwrap(),
+        "# Manually changed skill\n"
+    );
+    server.join().unwrap();
+}
+
+#[test]
 fn executable_uses_specified_exit_codes_and_output_channels() {
     let working_directory = TemporaryDirectory::new();
 
@@ -578,4 +720,27 @@ fn create_skill_without_metadata(working_directory: &std::path::Path, name: &str
     let skill = working_directory.join(".agents").join("skills").join(name);
     fs::create_dir_all(&skill).unwrap();
     fs::write(skill.join("SKILL.md"), "# Existing skill\n").unwrap();
+}
+
+fn create_manually_modified_managed_skill(
+    working_directory: &std::path::Path,
+    name: &str,
+    source_url: &str,
+) {
+    let skills_root = working_directory.join(".agents/skills");
+    let name = SkillName::parse(name).unwrap();
+    let original_content = "# Generated skill\n";
+    let metadata = ManagedSkillMetadata::new(
+        SourceUrl::parse(source_url).unwrap(),
+        DiscoveryConfiguration::default(),
+        content_digest(original_content),
+    );
+    TransactionalSkillCreator::new(&skills_root)
+        .create(&name, original_content, &metadata)
+        .unwrap();
+    fs::write(
+        skills_root.join(name.as_str()).join("SKILL.md"),
+        "# Manually changed skill\n",
+    )
+    .unwrap();
 }
