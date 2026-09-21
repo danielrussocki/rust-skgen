@@ -132,6 +132,22 @@ impl TransactionalSkillCreator {
     where
         F: FnOnce(&Path) -> Result<(), StorageError>,
     {
+        self.replace_with_writer_and_backup_remover(current_name, new_name, writer, |backup| {
+            fs::remove_dir_all(backup)
+        })
+    }
+
+    fn replace_with_writer_and_backup_remover<F, R>(
+        &self,
+        current_name: &SkillName,
+        new_name: &SkillName,
+        writer: F,
+        backup_remover: R,
+    ) -> Result<(), StorageError>
+    where
+        F: FnOnce(&Path) -> Result<(), StorageError>,
+        R: FnOnce(&Path) -> io::Result<()>,
+    {
         let _locks = self.lock_names(current_name, new_name)?;
         let current = self.skills_root.join(current_name.as_str());
         let destination = self.skills_root.join(new_name.as_str());
@@ -155,7 +171,11 @@ impl TransactionalSkillCreator {
         }
 
         match fs::rename(&pending, &destination) {
-            Ok(()) => fs::remove_dir_all(&backup).map_err(StorageError::RemoveBackup),
+            Ok(()) => {
+                // Publication is durable; a stale backup must not turn this into a false failure.
+                let _ = backup_remover(&backup);
+                Ok(())
+            }
             Err(error) => {
                 let _ = fs::remove_dir_all(&pending);
                 if let Err(restore_error) = fs::rename(&backup, &current) {
@@ -534,6 +554,37 @@ mod tests {
         assert_eq!(
             fs::read_to_string(skill.join(SKILL_FILE_NAME)).unwrap(),
             "# Previous skill\n"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn succeeds_when_cleanup_of_a_published_replacement_backup_fails() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("rust-skgen-backup-cleanup-{unique}"));
+        fs::create_dir(&root).unwrap();
+        let name = SkillName::parse("existing-skill").unwrap();
+        let skill = root.join(name.as_str());
+        fs::create_dir(&skill).unwrap();
+        fs::write(skill.join(SKILL_FILE_NAME), "# Previous skill\n").unwrap();
+
+        let result = TransactionalSkillCreator::new(&root).replace_with_writer_and_backup_remover(
+            &name,
+            &name,
+            |pending| {
+                fs::write(pending.join(SKILL_FILE_NAME), "# Replacement skill\n")
+                    .map_err(StorageError::WriteContent)
+            },
+            |_| Err(io::Error::other("simulated cleanup failure")),
+        );
+
+        assert!(result.is_ok());
+        assert_eq!(
+            fs::read_to_string(skill.join(SKILL_FILE_NAME)).unwrap(),
+            "# Replacement skill\n"
         );
         fs::remove_dir_all(root).unwrap();
     }

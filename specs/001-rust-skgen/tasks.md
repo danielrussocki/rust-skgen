@@ -156,23 +156,23 @@ Hecho cuando: Un test de renderizado verifica que `Objective` e `Instructions` n
 RF: RF-4, RF-6.
 Hecho cuando: Tests de deserialización rechazan huellas vacías, prefijos distintos de `sha256:` y valores que no contienen exactamente 64 dígitos hexadecimales.
 
-- [ ] T40. Permitir actualizar una skill con metadatos válidos aunque su contenido gestionado haya sido editado manualmente.
+- [x] T40. Permitir actualizar una skill con metadatos válidos aunque su contenido gestionado haya sido editado manualmente.
 RF: RF-5, RF-6.
 Hecho cuando: Un test de servicio modifica manualmente una skill con metadatos válidos y verifica que una actualización correcta reemplaza el contenido y conserva metadatos válidos.
 
-- [ ] T41. Definir y probar la reconstrucción confirmada de metadatos ausentes o inválidos.
+- [x] T41. Definir y probar la reconstrucción confirmada de metadatos ausentes o inválidos.
 RF: RF-6.
 Hecho cuando: Tests deterministas especifican la configuración usada al aceptar la reconstrucción y verifican que el rechazo o la ausencia de respuesta no modifica la skill.
 
-- [ ] T42. Implementar la reconstrucción confirmada de metadatos ausentes o inválidos según la configuración definida.
+- [x] T42. Implementar la reconstrucción confirmada de metadatos ausentes o inválidos según la configuración definida.
 RF: RF-6.
 Hecho cuando: Un test de servicio confirma la reconstrucción para metadatos ausentes y otro para metadatos inválidos; ambos actualizan la skill y escriben metadatos válidos.
 
-- [ ] T43. Restaurar la versión previa si falla cualquier fase de reemplazo antes de confirmar la actualización.
+- [x] T43. Restaurar la versión previa si falla cualquier fase de reemplazo antes de confirmar la actualización.
 RF: RF-2, RF-7.
 Hecho cuando: Un doble de almacenamiento que falla al limpiar el backup verifica que la operación no informa un fallo después de publicar contenido nuevo, o que restaura íntegramente la versión previa.
 
-- [ ] T44. Añadir al resultado de CLI el fallo individual de creación y su código de salida.
+- [x] T44. Añadir al resultado de CLI el fallo individual de creación y su código de salida.
 RF: RF-7.
 Hecho cuando: Tests de salida verifican que un fallo de creación produce `Failed skill: <name>: <reason>` en error estándar y código 1.
 

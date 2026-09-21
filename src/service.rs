@@ -289,6 +289,8 @@ pub enum UpdateSkillError {
     RebuildRequired(SkillName),
     /// The user rejected rebuilding the management state or supplied no response.
     RebuildDeclined(SkillName),
+    /// Rebuilding unmanaged metadata requires an explicit source URL.
+    RebuildConfigurationRequired(SkillName),
     /// The requested changes produce incompatible discovery settings.
     InvalidDiscoveryConfiguration(DiscoveryConfigurationError),
     /// Documentation discovery could not produce a complete skill input.
@@ -320,6 +322,13 @@ impl std::fmt::Display for UpdateSkillError {
                     name.as_str()
                 )
             }
+            Self::RebuildConfigurationRequired(name) => {
+                write!(
+                    formatter,
+                    "metadata reconstruction requires a source URL: {}",
+                    name.as_str()
+                )
+            }
             Self::InvalidDiscoveryConfiguration(error) => {
                 write!(formatter, "invalid update configuration: {error}")
             }
@@ -340,7 +349,8 @@ impl std::error::Error for UpdateSkillError {
             Self::SkillNotFound(_)
             | Self::SkillNotManaged(_)
             | Self::RebuildRequired(_)
-            | Self::RebuildDeclined(_) => None,
+            | Self::RebuildDeclined(_)
+            | Self::RebuildConfigurationRequired(_) => None,
         }
     }
 }
@@ -500,33 +510,31 @@ fn update_skill_inner<F: DocumentFetcher, P: CrawlPolicy>(
     policy: &P,
     publisher: &TransactionalSkillCreator,
 ) -> Result<UpdateSkillResult, UpdateSkillError> {
-    let metadata = match publisher
+    let (source_url, discovery) = match publisher
         .management_status(&request.current_name)
         .map_err(UpdateSkillError::Storage)?
     {
-        Some(ManagedSkillStatus::Managed(metadata)) => {
-            let content = publisher
-                .managed_content(&request.current_name)
-                .map_err(UpdateSkillError::Storage)?;
-            if content
-                .as_deref()
-                .is_none_or(|content| !metadata.has_matching_content_digest(content))
-            {
-                require_rebuild_confirmation(&request.current_name, confirmation)?;
-            }
-            metadata
-        }
+        Some(ManagedSkillStatus::Managed(metadata)) => (
+            request
+                .changes
+                .source_url
+                .clone()
+                .unwrap_or_else(|| metadata.source_url().clone()),
+            updated_discovery_configuration(metadata.discovery(), &request.changes)?,
+        ),
         Some(ManagedSkillStatus::MetadataMissing | ManagedSkillStatus::InvalidMetadata(_)) => {
             require_rebuild_confirmation(&request.current_name, confirmation)?;
-            return Err(UpdateSkillError::SkillNotManaged(request.current_name));
+            let source_url = request.changes.source_url.clone().ok_or_else(|| {
+                UpdateSkillError::RebuildConfigurationRequired(request.current_name.clone())
+            })?;
+            let defaults = DiscoveryConfiguration::default();
+            (
+                source_url,
+                updated_discovery_configuration(&defaults, &request.changes)?,
+            )
         }
         None => return Err(UpdateSkillError::SkillNotFound(request.current_name)),
     };
-    let discovery = updated_discovery_configuration(&metadata, &request.changes)?;
-    let source_url = request
-        .changes
-        .source_url
-        .unwrap_or_else(|| metadata.source_url().clone());
     let new_name = request
         .changes
         .new_name
@@ -557,10 +565,9 @@ fn require_rebuild_confirmation(
 }
 
 fn updated_discovery_configuration(
-    metadata: &ManagedSkillMetadata,
+    previous: &DiscoveryConfiguration,
     changes: &UpdateSkillChanges,
 ) -> Result<DiscoveryConfiguration, UpdateSkillError> {
-    let previous = metadata.discovery();
     let scope = changes.scope.unwrap_or_else(|| previous.scope());
     let site_boundary = (scope == DiscoveryScope::SameSite).then(|| {
         changes.site_boundary.unwrap_or_else(|| {

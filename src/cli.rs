@@ -18,6 +18,13 @@ pub trait CommandHandler {}
 pub enum CommandOutput {
     /// One skill was created.
     Created(SkillName),
+    /// One requested skill could not be created.
+    CreateFailed {
+        /// Name of the skill that failed.
+        name: SkillName,
+        /// English error message explaining the failure.
+        reason: String,
+    },
     /// One or more selected skills were updated independently.
     Updated(Vec<SkillOutput>),
     /// Updating all skills found no managed skills.
@@ -72,6 +79,10 @@ pub fn write_command_output(
         CommandOutput::Created(name) => {
             writeln!(standard_output, "Created skill: {}", name.as_str())?;
             Ok(0)
+        }
+        CommandOutput::CreateFailed { name, reason } => {
+            writeln!(standard_error, "Failed skill: {}: {reason}", name.as_str())?;
+            Ok(1)
         }
         CommandOutput::Updated(outcomes) => {
             let mut has_failures = false;

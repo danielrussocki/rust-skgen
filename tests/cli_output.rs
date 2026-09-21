@@ -24,6 +24,29 @@ fn create_success_is_written_to_standard_output_with_exit_code_zero() {
 }
 
 #[test]
+fn create_failure_is_written_to_standard_error_with_exit_code_one() {
+    let mut standard_output = Vec::new();
+    let mut standard_error = Vec::new();
+
+    let exit_code = write_command_output(
+        CommandOutput::CreateFailed {
+            name: SkillName::parse("failed-skill").unwrap(),
+            reason: "the source returned HTTP status 500".to_owned(),
+        },
+        &mut standard_output,
+        &mut standard_error,
+    )
+    .unwrap();
+
+    assert_eq!(exit_code, 1);
+    assert!(standard_output.is_empty());
+    assert_eq!(
+        String::from_utf8(standard_error).unwrap(),
+        "Failed skill: failed-skill: the source returned HTTP status 500\n"
+    );
+}
+
+#[test]
 fn update_writes_each_skill_result_and_returns_failure_when_any_skill_fails() {
     let mut standard_output = Vec::new();
     let mut standard_error = Vec::new();
