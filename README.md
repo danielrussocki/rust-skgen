@@ -9,8 +9,10 @@ deterministic skill with attributed source URLs and metadata for later updates.
 - Rust 1.85 or later.
 - Network access to the public documentation site.
 
-The CLI respects `robots.txt`, does not follow redirects, and rejects URLs that require
-credentials. Only use it with documentation that you are permitted to retrieve.
+The CLI respects rules from every valid `robots.txt` it finds, does not follow redirects, and
+rejects URLs that require credentials. By default, a missing, inaccessible, or invalid
+`robots.txt` does not prevent discovery; this can be made mandatory with an option below. Only
+use it with documentation that you are permitted to retrieve.
 
 ## Build and run
 
@@ -57,6 +59,7 @@ It cannot start or end with a hyphen. Existing skill directories are never overw
 --traversal all|one-level|limited
 --max-pages <positive-integer>
 --format guide-with-references|organized-content
+--require-robots-txt true|false
 --user-agent <value>
 ```
 
@@ -65,9 +68,12 @@ Defaults:
 ```text
 scope:          same-site
 site boundary:  exact-host
+allow subdomain: none
 traversal:      all
 format:         guide-with-references
-max pages:      100, when --traversal limited omits --max-pages
+max pages:      not set; 100 when --traversal limited omits --max-pages
+require robots: false
+user agent:     rust-skgen/0.1
 ```
 
 Scope behavior:
@@ -83,6 +89,18 @@ Site boundaries are valid only with `same-site`:
 - `base-domain` allows registered-domain pages. A different subdomain must be listed with
   `--allow-subdomain` and linked from an included page.
 - `same-origin` requires the same scheme, host, and port.
+
+### robots.txt policy
+
+Discovery attempts to evaluate `robots.txt` before requesting each documentation page.
+
+- Valid rules are always applied.
+- By default, missing, unreachable, non-successful, or invalid `robots.txt` responses allow
+  discovery to continue.
+- Use `--require-robots-txt true` to require a valid, reachable `robots.txt`. If it cannot be
+  retrieved or validated, the operation fails without creating or changing a partial skill.
+- The selected setting is stored in `metadata.json` and reused by later updates. It can be
+  changed for exactly one skill with `update --require-robots-txt true|false`.
 
 Examples:
 
@@ -102,6 +120,10 @@ cargo run -- create https://docs.example.com/start example-docs `
   --scope same-site `
   --site-boundary base-domain `
   --allow-subdomain api.example.com
+
+# Require a valid robots.txt document for this skill.
+cargo run -- create https://example.com/docs/start strict-docs `
+  --require-robots-txt true
 ```
 
 ## Update skills
@@ -128,6 +150,7 @@ cargo run -- update radix-primitives `
   --site-boundary exact-host `
   --traversal limited `
   --max-pages 25 `
+  --require-robots-txt true `
   --format organized-content
 ```
 
