@@ -284,10 +284,10 @@ Hecho cuando: Tests de servicio verifican que la creación usa el valor solicita
 RF: RF-1, RF-2, RF-3, RF-5, RF-6, RF-7.
 Hecho cuando: Un servidor local sin `robots.txt` permite `create` y `update` por defecto, los rechaza cuando se exige, conserva las skills previas ante el rechazo y respeta una prohibición de un archivo válido en ambos modos.
 
-- [ ] T72. Actualizar la matriz de trazabilidad con las cláusulas y casos límite de `robots.txt` opcional.
+- [x] T72. Actualizar la matriz de trazabilidad con las cláusulas y casos límite de `robots.txt` opcional.
 RF: RF-3, RF-4, RF-5, RF-6.
 Hecho cuando: `docs/traceability.md` referencia pruebas deterministas para valor predeterminado, exigencia explícita, ausencia o invalidez, prohibición válida, persistencia y actualización individual o múltiple.
 
-- [ ] T73. Ejecutar las verificaciones finales y comprobar la trazabilidad de los requisitos y casos límite modificados.
+- [x] T73. Ejecutar las verificaciones finales y comprobar la trazabilidad de los requisitos y casos límite modificados.
 RF: RF-1 a RF-7.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y cada cláusula nueva de RF-3, RF-4 y RF-6 tiene una prueba identificable.
