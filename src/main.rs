@@ -23,11 +23,12 @@ fn main() {
         Ok(cli) => cli,
         Err(error) => {
             let exit_code = if error.kind() == ErrorKind::DisplayHelp {
+                let _ = error.print();
                 0
             } else {
+                eprintln!("Invalid argument: {}", invalid_argument_reason(&error));
                 2
             };
-            let _ = error.print();
             std::process::exit(exit_code);
         }
     };
@@ -128,6 +129,18 @@ fn run(cli: Cli) -> io::Result<u8> {
             write_command_output(output, &mut standard_output, &mut standard_error)
         }
     }
+}
+
+fn invalid_argument_reason(error: &clap::Error) -> String {
+    let message = error.to_string();
+    message
+        .split_once("error: ")
+        .map_or(message.as_str(), |(_, reason)| reason)
+        .lines()
+        .next()
+        .unwrap_or(message.trim())
+        .trim()
+        .to_owned()
 }
 
 struct InteractiveRebuildConfirmation;

@@ -316,6 +316,52 @@ fn update_rebuild_confirmation_accepts_y_and_preserves_skills_for_n_or_eof() {
     }
 }
 
+#[test]
+fn executable_uses_specified_exit_codes_and_output_channels() {
+    let working_directory = TemporaryDirectory::new();
+
+    let success = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .arg("update")
+        .output()
+        .unwrap();
+
+    assert_eq!(success.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8(success.stdout).unwrap(),
+        "No managed skills found.\n"
+    );
+    assert!(success.stderr.is_empty());
+
+    let skill_failure = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["update", "missing-docs"])
+        .output()
+        .unwrap();
+
+    assert_eq!(skill_failure.status.code(), Some(1));
+    assert!(skill_failure.stdout.is_empty());
+    assert!(
+        String::from_utf8(skill_failure.stderr)
+            .unwrap()
+            .starts_with("Failed skill: missing-docs:")
+    );
+
+    let invalid_arguments = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["update", "--source-url", "https://example.com/docs"])
+        .output()
+        .unwrap();
+
+    assert_eq!(invalid_arguments.status.code(), Some(2));
+    assert!(invalid_arguments.stdout.is_empty());
+    assert!(
+        String::from_utf8(invalid_arguments.stderr)
+            .unwrap()
+            .contains("Invalid argument: configuration changes require exactly one selected skill")
+    );
+}
+
 fn create_skill_without_metadata(working_directory: &std::path::Path, name: &str) {
     let skill = working_directory.join(".agents").join("skills").join(name);
     fs::create_dir_all(&skill).unwrap();

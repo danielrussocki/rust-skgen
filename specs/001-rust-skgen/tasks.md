@@ -196,7 +196,7 @@ Hecho cuando: Tests de integración ejecutan actualizaciones sin nombres, selecc
 RF: RF-6.
 Hecho cuando: Tests de integración con entrada simulada verifican que `y` reconstruye y actualiza, mientras que `n` y EOF no modifican la skill.
 
-- [ ] T50. Verificar de extremo a extremo los códigos de salida y los canales de salida del ejecutable.
+- [x] T50. Verificar de extremo a extremo los códigos de salida y los canales de salida del ejecutable.
 RF: RF-7.
 Hecho cuando: Tests de integración verifican código 0 para éxito, 1 para uno o más fallos de skill y 2 para argumentos inválidos, con los mensajes en los canales especificados.
 
