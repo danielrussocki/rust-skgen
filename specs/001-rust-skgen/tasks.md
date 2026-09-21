@@ -200,6 +200,6 @@ Hecho cuando: Tests de integración con entrada simulada verifican que `y` recon
 RF: RF-7.
 Hecho cuando: Tests de integración verifican código 0 para éxito, 1 para uno o más fallos de skill y 2 para argumentos inválidos, con los mensajes en los canales especificados.
 
-- [ ] T51. Ejecutar la matriz completa de pruebas de requisitos y cerrar los huecos de cobertura restantes.
+- [x] T51. Ejecutar la matriz completa de pruebas de requisitos y cerrar los huecos de cobertura restantes.
 RF: RF-1 a RF-7.
 Hecho cuando: Cada requisito funcional y caso límite de la especificación tiene una prueba determinista identificable y `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.

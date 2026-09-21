@@ -7,8 +7,8 @@ use std::{
 
 use rust_skgen::{
     domain::{
-        ContentFormat, DiscoveryConfiguration, DiscoveryScope, SiteBoundary, SkillName, SourceUrl,
-        TraversalMode,
+        AuthorizedHost, ContentFormat, DiscoveryConfiguration, DiscoveryScope, SiteBoundary,
+        SkillName, SourceUrl, TraversalMode,
     },
     fetch::{DocumentFetcher, FetchError, FetchedDocument},
     metadata::{ManagedSkillMetadata, content_digest},
@@ -315,6 +315,75 @@ fn updates_each_individual_configuration_field_and_persists_it() {
         metadata.discovery().content_format(),
         ContentFormat::OrganizedContent
     );
+}
+
+#[test]
+fn persists_authorized_subdomains_in_an_individual_update() {
+    let skills = TemporarySkillsDirectory::new();
+    let name = SkillName::parse("managed-docs").unwrap();
+    TransactionalSkillCreator::new(skills.path())
+        .create(&name, "# Previous skill\n", &initial_metadata())
+        .unwrap();
+    let source_url = SourceUrl::parse("https://docs.example.test/start").unwrap();
+    let authorized = AuthorizedHost::new("api.docs.example.test".to_owned());
+
+    update_skill(
+        UpdateSkillRequest::new(name.clone())
+            .with_site_boundary(SiteBoundary::BaseDomain)
+            .with_authorized_subdomains(vec![authorized.clone()]),
+        &LocalDocumentationFetcher {
+            documents: BTreeMap::from([(
+                source_url.as_url().clone(),
+                "<main><p>Updated documentation.</p></main>".to_owned(),
+            )]),
+        },
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    )
+    .unwrap();
+
+    let metadata = ManagedSkillMetadata::from_json(
+        &fs::read_to_string(skills.path().join(name.as_str()).join(METADATA_FILE_NAME)).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        metadata.discovery().site_boundary(),
+        SiteBoundary::BaseDomain
+    );
+    assert_eq!(metadata.discovery().authorized_subdomains(), &[authorized]);
+}
+
+#[test]
+fn preserves_the_current_skill_when_a_renamed_update_fails_before_publication() {
+    let skills = TemporarySkillsDirectory::new();
+    let current_name = SkillName::parse("current-docs").unwrap();
+    let new_name = SkillName::parse("renamed-docs").unwrap();
+    let creator = TransactionalSkillCreator::new(skills.path());
+    creator
+        .create(&current_name, "# Previous skill\n", &initial_metadata())
+        .unwrap();
+
+    let result = update_skill(
+        UpdateSkillRequest::new(current_name.clone()).with_name(new_name.clone()),
+        &LocalDocumentationFetcher {
+            documents: BTreeMap::new(),
+        },
+        &AllowAllPolicy,
+        &creator,
+    );
+
+    assert!(matches!(result, Err(UpdateSkillError::Discovery(_))));
+    assert_eq!(
+        fs::read_to_string(
+            skills
+                .path()
+                .join(current_name.as_str())
+                .join(SKILL_FILE_NAME)
+        )
+        .unwrap(),
+        "# Previous skill\n"
+    );
+    assert!(!skills.path().join(new_name.as_str()).exists());
 }
 
 #[test]

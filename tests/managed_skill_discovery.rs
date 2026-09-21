@@ -109,3 +109,23 @@ fn reports_missing_and_invalid_metadata_without_treating_them_as_managed() {
     ));
     assert!(located.iter().all(|skill| !skill.is_managed()));
 }
+
+#[test]
+fn does_not_treat_metadata_from_a_different_generator_as_managed() {
+    let skills = TemporarySkillsDirectory::new();
+    let foreign = skills.create_skill("foreign-skill");
+    let metadata = valid_metadata().to_json().unwrap().replace(
+        "\"generator\":\"rust-skgen\"",
+        "\"generator\":\"other-generator\"",
+    );
+    fs::write(foreign.join(METADATA_FILE_NAME), metadata).unwrap();
+
+    let located = SkillLocator::new(skills.path()).locate().unwrap();
+
+    assert_eq!(located.len(), 1);
+    assert!(matches!(
+        located[0].status(),
+        ManagedSkillStatus::InvalidMetadata(_)
+    ));
+    assert!(!located[0].is_managed());
+}

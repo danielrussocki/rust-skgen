@@ -386,6 +386,17 @@ mod tests {
         fetched_urls: RefCell<Vec<Url>>,
     }
 
+    struct SourceRedirectingFetcher {
+        fetched_urls: RefCell<Vec<Url>>,
+    }
+
+    impl DocumentFetcher for SourceRedirectingFetcher {
+        fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
+            self.fetched_urls.borrow_mut().push(url.clone());
+            Ok(FetchedDocument::new(url, 302, String::new()))
+        }
+    }
+
     impl DocumentFetcher for RedirectingFetcher {
         fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
             self.fetched_urls.borrow_mut().push(url.clone());
@@ -598,6 +609,75 @@ mod tests {
         assert_eq!(
             fetcher.fetched_urls.into_inner(),
             vec![source_url, redirect_url]
+        );
+    }
+
+    #[test]
+    fn source_redirect_aborts_discovery_before_related_pages_are_visited() {
+        let source_url = url("/start");
+        let fetcher = SourceRedirectingFetcher {
+            fetched_urls: RefCell::new(Vec::new()),
+        };
+
+        let result = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        );
+
+        assert!(matches!(result, Err(DiscoveryError::Redirect(url)) if url == source_url));
+        assert_eq!(fetcher.fetched_urls.into_inner(), vec![source_url]);
+    }
+
+    #[test]
+    fn documentation_navigation_only_visits_initial_navigation_links() {
+        let source_url = url("/start");
+        let navigation_url = url("/navigation");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            source_url.clone(),
+            format!(
+                "{}<nav><a href=\"/navigation\">Navigation</a></nav><a href=\"/outside\">Outside</a>",
+                document("Start")
+            ),
+        );
+        documents.insert(
+            navigation_url.clone(),
+            format!(
+                "{}<a href=\"/descendant\">Descendant</a>",
+                document("Navigation")
+            ),
+        );
+        let fetcher = GraphFetcher::new(documents);
+        let configuration = DiscoveryConfiguration::new(
+            DiscoveryScope::DocumentationNavigation,
+            None,
+            Vec::new(),
+            TraversalMode::All,
+            None,
+            ContentFormat::GuideWithReferences,
+        )
+        .expect("navigation configuration must be valid");
+
+        let pages = discover_all(
+            source_url.clone(),
+            &configuration,
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("the navigation link should be discovered");
+
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.source_url().clone())
+                .collect::<Vec<_>>(),
+            vec![navigation_url.clone(), source_url.clone()]
+        );
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![source_url, navigation_url]
         );
     }
 
