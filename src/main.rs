@@ -10,7 +10,7 @@ use rust_skgen::{
     cli::{Cli, Command, CommandOutput, write_command_output},
     domain::DiscoveryConfiguration,
     fetch::{FetchConfiguration, HttpDocumentFetcher},
-    policy::RobotsTxtPolicy,
+    policy::{AccessConditions, CombinedCrawlPolicy, RobotsTxtPolicy},
     service::{
         CreateSkillRequest, RebuildConfirmation, UpdateSkillChanges, create_skill, update_skills,
         update_skills_with_changes_and_confirmation,
@@ -76,7 +76,10 @@ fn run(cli: Cli) -> io::Result<u8> {
                 discovery,
             );
             let publisher = TransactionalSkillCreator::new(skills_root);
-            let policy = RobotsTxtPolicy::new(fetcher.clone(), user_agent);
+            let policy = CombinedCrawlPolicy::new(
+                RobotsTxtPolicy::new(fetcher.clone(), user_agent),
+                AccessConditions::default(),
+            );
             let output = match create_skill(request, &fetcher, &policy, &publisher) {
                 Ok(result) => CommandOutput::from_created(result),
                 Err(error) => CommandOutput::CreateFailed {
@@ -97,7 +100,10 @@ fn run(cli: Cli) -> io::Result<u8> {
                 2,
             ))
             .map_err(io::Error::other)?;
-            let policy = RobotsTxtPolicy::new(fetcher.clone(), user_agent);
+            let policy = CombinedCrawlPolicy::new(
+                RobotsTxtPolicy::new(fetcher.clone(), user_agent),
+                AccessConditions::default(),
+            );
             let publisher = TransactionalSkillCreator::new(&skills_root);
             let result = if arguments.has_changes() {
                 let changes = update_changes(&arguments);

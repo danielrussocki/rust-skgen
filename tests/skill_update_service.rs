@@ -493,7 +493,37 @@ fn accepts_rebuild_confirmation_for_a_mismatched_content_digest() {
 }
 
 #[test]
-fn updates_a_manually_edited_skill_when_its_metadata_is_valid() {
+fn mismatched_content_digest_requires_confirmation_before_rebuilding() {
+    for confirmation in [Confirmation(Some(false)), Confirmation(None)] {
+        let skills = TemporarySkillsDirectory::new();
+        let name = SkillName::parse("changed-skill").unwrap();
+        let creator = TransactionalSkillCreator::new(skills.path());
+        creator
+            .create(&name, "# Previous skill\n", &initial_metadata())
+            .unwrap();
+        let skill_file = skills.path().join(name.as_str()).join(SKILL_FILE_NAME);
+        fs::write(&skill_file, "# Manually changed skill\n").unwrap();
+
+        let result = update_skill_with_confirmation(
+            UpdateSkillRequest::new(name),
+            &confirmation,
+            &LocalDocumentationFetcher {
+                documents: BTreeMap::new(),
+            },
+            &AllowAllPolicy,
+            &creator,
+        );
+
+        assert!(matches!(result, Err(UpdateSkillError::RebuildDeclined(_))));
+        assert_eq!(
+            fs::read_to_string(skill_file).unwrap(),
+            "# Manually changed skill\n"
+        );
+    }
+}
+
+#[test]
+fn updates_a_manually_edited_skill_after_rebuild_confirmation() {
     let skills = TemporarySkillsDirectory::new();
     let name = SkillName::parse("manually-edited-skill").unwrap();
     let creator = TransactionalSkillCreator::new(skills.path());
@@ -504,8 +534,9 @@ fn updates_a_manually_edited_skill_when_its_metadata_is_valid() {
     fs::write(&skill_file, "# Manually changed skill\n").unwrap();
     let source_url = SourceUrl::parse("https://docs.example.test/start").unwrap();
 
-    let result = update_skill(
+    let result = update_skill_with_confirmation(
         UpdateSkillRequest::new(name.clone()),
+        &Confirmation(Some(true)),
         &LocalDocumentationFetcher {
             documents: BTreeMap::from([(
                 source_url.as_url().clone(),

@@ -561,6 +561,17 @@ fn update_skill_inner<F: DocumentFetcher, P: CrawlPolicy>(
                 .unwrap_or_else(|| metadata.source_url().clone()),
             updated_discovery_configuration(metadata.discovery(), &request.changes)?,
         ),
+        Some(ManagedSkillStatus::ContentDigestMismatch(metadata)) => {
+            require_rebuild_confirmation(&request.current_name, confirmation)?;
+            (
+                request
+                    .changes
+                    .source_url
+                    .clone()
+                    .unwrap_or_else(|| metadata.source_url().clone()),
+                updated_discovery_configuration(metadata.discovery(), &request.changes)?,
+            )
+        }
         Some(ManagedSkillStatus::MetadataMissing | ManagedSkillStatus::InvalidMetadata(_)) => {
             require_rebuild_confirmation(&request.current_name, confirmation)?;
             let source_url = request.changes.source_url.clone().ok_or_else(|| {

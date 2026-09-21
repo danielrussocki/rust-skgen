@@ -92,6 +92,58 @@ fn failing_documentation_server() -> (String, thread::JoinHandle<()>) {
     (format!("http://{address}/start"), handle)
 }
 
+fn redirecting_documentation_server() -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        for request_number in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 1024];
+            let length = stream.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..length]);
+            let response = if request_number == 0 && request.starts_with("GET /robots.txt ") {
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 22\r\nConnection: close\r\n\r\nUser-agent: *\nAllow: /\n"
+            } else {
+                "HTTP/1.1 302 Found\r\nLocation: /moved\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            };
+            stream.write_all(response.as_bytes()).unwrap();
+        }
+    });
+    (format!("http://{address}/start"), handle)
+}
+
+fn mixed_update_server() -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        for _ in 0..6 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 1024];
+            let length = stream.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..length]);
+            let (status, content_type, body) = if request.starts_with("GET /robots.txt ") {
+                ("200 OK", "text/plain", "User-agent: *\nAllow: /\n")
+            } else if request.starts_with("GET /failing ") {
+                ("500 Internal Server Error", "text/html", "unavailable")
+            } else {
+                (
+                    "200 OK",
+                    "text/html",
+                    "<main><p>Updated documentation.</p></main>",
+                )
+            };
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        }
+    });
+    (format!("http://{address}"), handle)
+}
+
 #[test]
 fn create_publishes_only_under_the_current_working_directory_skills_root() {
     let working_directory = TemporaryDirectory::new();
@@ -173,6 +225,166 @@ fn create_does_not_leave_a_partial_directory_when_discovery_fails() {
             .join("skills")
             .join("failed-docs")
             .exists()
+    );
+}
+
+#[test]
+fn create_rejects_invalid_redirected_and_inaccessible_source_urls_without_partial_skills() {
+    let invalid_directory = TemporaryDirectory::new();
+    let invalid = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&invalid_directory.path)
+        .args(["create", "file:///documentation", "invalid-docs"])
+        .output()
+        .unwrap();
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(
+        !invalid_directory
+            .path
+            .join(".agents/skills/invalid-docs")
+            .exists()
+    );
+
+    let redirected_directory = TemporaryDirectory::new();
+    let (redirected_url, server) = redirecting_documentation_server();
+    let redirected = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&redirected_directory.path)
+        .args(["create", &redirected_url, "redirected-docs"])
+        .output()
+        .unwrap();
+    server.join().unwrap();
+    assert_eq!(redirected.status.code(), Some(1));
+    assert!(
+        !redirected_directory
+            .path
+            .join(".agents/skills/redirected-docs")
+            .exists()
+    );
+
+    let inaccessible_directory = TemporaryDirectory::new();
+    let inaccessible = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&inaccessible_directory.path)
+        .args([
+            "create",
+            "http://127.0.0.1:1/unavailable",
+            "inaccessible-docs",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(inaccessible.status.code(), Some(1));
+    assert!(
+        !inaccessible_directory
+            .path
+            .join(".agents/skills/inaccessible-docs")
+            .exists()
+    );
+}
+
+#[test]
+fn create_and_update_reject_urls_forbidden_by_access_conditions() {
+    let create_directory = TemporaryDirectory::new();
+    let restricted_url = "http://user:secret@127.0.0.1:1/restricted";
+
+    let create = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&create_directory.path)
+        .args(["create", restricted_url, "restricted-docs"])
+        .output()
+        .unwrap();
+
+    assert_eq!(create.status.code(), Some(1));
+    assert!(
+        String::from_utf8(create.stderr)
+            .unwrap()
+            .contains("crawl policy forbids URL")
+    );
+    assert!(
+        !create_directory
+            .path
+            .join(".agents/skills/restricted-docs")
+            .exists()
+    );
+
+    let update_directory = TemporaryDirectory::new();
+    let skills_root = update_directory.path.join(".agents/skills");
+    let name = SkillName::parse("restricted-docs").unwrap();
+    let original_content = "# Existing skill\n";
+    let metadata = ManagedSkillMetadata::new(
+        SourceUrl::parse(restricted_url).unwrap(),
+        DiscoveryConfiguration::default(),
+        content_digest(original_content),
+    );
+    TransactionalSkillCreator::new(&skills_root)
+        .create(&name, original_content, &metadata)
+        .unwrap();
+
+    let update = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&update_directory.path)
+        .args(["update", "restricted-docs"])
+        .output()
+        .unwrap();
+
+    assert_eq!(update.status.code(), Some(1));
+    assert!(
+        String::from_utf8(update.stderr)
+            .unwrap()
+            .contains("crawl policy forbids URL")
+    );
+    assert_eq!(
+        fs::read_to_string(skills_root.join("restricted-docs/SKILL.md")).unwrap(),
+        original_content
+    );
+}
+
+#[test]
+fn update_batch_continues_after_discovery_failure_and_exits_with_one() {
+    let working_directory = TemporaryDirectory::new();
+    let skills_root = working_directory.path.join(".agents/skills");
+    let (server_url, server) = mixed_update_server();
+    let creator = TransactionalSkillCreator::new(&skills_root);
+    let failing = SkillName::parse("failing-docs").unwrap();
+    let succeeding = SkillName::parse("succeeding-docs").unwrap();
+    let failing_content = "# Failing skill\n";
+    let succeeding_content = "# Succeeding skill\n";
+    for (name, source_url, content) in [
+        (&failing, format!("{server_url}/failing"), failing_content),
+        (
+            &succeeding,
+            format!("{server_url}/succeeding"),
+            succeeding_content,
+        ),
+    ] {
+        let metadata = ManagedSkillMetadata::new(
+            SourceUrl::parse(&source_url).unwrap(),
+            DiscoveryConfiguration::default(),
+            content_digest(content),
+        );
+        creator.create(name, content, &metadata).unwrap();
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["update", "failing-docs", "succeeding-docs"])
+        .output()
+        .unwrap();
+    server.join().unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("Failed skill: failing-docs")
+    );
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("Updated skill: succeeding-docs")
+    );
+    assert_eq!(
+        fs::read_to_string(skills_root.join("failing-docs/SKILL.md")).unwrap(),
+        failing_content
+    );
+    assert_ne!(
+        fs::read_to_string(skills_root.join("succeeding-docs/SKILL.md")).unwrap(),
+        succeeding_content
     );
 }
 

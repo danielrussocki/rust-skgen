@@ -15,6 +15,32 @@ pub trait AccessPolicy {
     fn allows(&self, url: &Url) -> bool;
 }
 
+/// Explicit access conditions that prevent requests requiring URL credentials.
+pub struct AccessConditions {
+    deny_urls_with_credentials: bool,
+}
+
+impl AccessConditions {
+    /// Configures whether URLs containing a username or password are prohibited.
+    pub fn new(deny_urls_with_credentials: bool) -> Self {
+        Self {
+            deny_urls_with_credentials,
+        }
+    }
+}
+
+impl Default for AccessConditions {
+    fn default() -> Self {
+        Self::new(true)
+    }
+}
+
+impl AccessPolicy for AccessConditions {
+    fn allows(&self, url: &Url) -> bool {
+        !self.deny_urls_with_credentials || (url.username().is_empty() && url.password().is_none())
+    }
+}
+
 /// Requires both robots.txt and applicable access conditions to permit a URL.
 pub struct CombinedCrawlPolicy<R, A> {
     robots_policy: R,
@@ -33,7 +59,10 @@ impl<R, A> CombinedCrawlPolicy<R, A> {
 
 impl<R: CrawlPolicy, A: AccessPolicy> CrawlPolicy for CombinedCrawlPolicy<R, A> {
     fn allows(&self, url: &Url) -> Result<bool, RobotsError> {
-        Ok(self.robots_policy.allows(url)? && self.access_policy.allows(url))
+        if !self.access_policy.allows(url) {
+            return Ok(false);
+        }
+        self.robots_policy.allows(url)
     }
 }
 
@@ -218,4 +247,19 @@ fn matches_pattern(pattern: &str, path: &str) -> bool {
     }
 
     !anchored || remainder.is_empty()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn configured_access_conditions_can_prohibit_urls_with_credentials() {
+        let policy = AccessConditions::new(true);
+        let public_url = Url::parse("https://docs.example.test/public").unwrap();
+        let credentialed_url = Url::parse("https://user:secret@docs.example.test/private").unwrap();
+
+        assert!(policy.allows(&public_url));
+        assert!(!policy.allows(&credentialed_url));
+    }
 }

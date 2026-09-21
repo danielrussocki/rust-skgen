@@ -203,3 +203,43 @@ Hecho cuando: Tests de integración verifican código 0 para éxito, 1 para uno 
 - [x] T51. Ejecutar la matriz completa de pruebas de requisitos y cerrar los huecos de cobertura restantes.
 RF: RF-1 a RF-7.
 Hecho cuando: Cada requisito funcional y caso límite de la especificación tiene una prueba determinista identificable y `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.
+
+- [x] T52. Añadir pruebas de regresión que exijan confirmación cuando la huella del contenido de una skill gestionada no coincide con sus metadatos.
+RF: RF-6.
+Hecho cuando: Tests deterministas verifican que una huella discrepante solicita confirmación, que `n` y EOF no modifican la skill, y que `y` la reconstruye correctamente.
+
+- [x] T53. Detectar la huella discrepante al cargar una skill gestionada para actualizarla.
+RF: RF-6.
+Hecho cuando: La actualización compara `SKILL.md` con `content_digest` antes de descubrir páginas y ejecuta el flujo de confirmación de T52 si no coinciden.
+
+- [x] T54. Añadir una prueba determinista de recuperación tras una interrupción entre el respaldo de la skill previa y la publicación de la sustitución.
+RF: RF-2.
+Hecho cuando: La prueba simula una interrupción después de mover la skill al backup y verifica que al reabrir el almacenamiento la versión previa sigue disponible en su ruta pública sin cambios.
+
+- [x] T55. Implementar la recuperación de respaldos pendientes antes de crear o reemplazar una skill.
+RF: RF-2.
+Hecho cuando: La recuperación de T54 restaura atómicamente el backup pendiente cuando no existe una publicación válida y no altera una skill publicada correctamente.
+
+- [x] T56. Definir una política de condiciones de acceso aplicables que pueda componerse con `robots.txt` sin interpretar ni eludir controles remotos.
+RF: RF-3.
+Hecho cuando: La política tiene una implementación concreta y testeable que permite o prohíbe URLs según condiciones de acceso explícitamente configuradas.
+
+- [x] T57. Conectar la política combinada de `robots.txt` y condiciones de acceso en los comandos `create` y `update`.
+RF: RF-3.
+Hecho cuando: Tests de integración verifican que una URL prohibida por condiciones de acceso hace fallar creación y actualización sin publicar contenido parcial.
+
+- [x] T58. Añadir pruebas de integración para los fallos de URL inicial de creación.
+RF: RF-1, RF-2, RF-3.
+Hecho cuando: Un servidor local verifica que URL con esquema no HTTP(S), URL inicial redirigida y URL inicial inaccesible devuelven fallo y no crean directorios parciales.
+
+- [x] T59. Añadir una prueba de integración para un lote de actualizaciones con un fallo de descubrimiento y una skill correcta.
+RF: RF-2, RF-7.
+Hecho cuando: El ejecutable conserva la skill fallida, actualiza la correcta, informa ambos resultados y finaliza con código 1.
+
+- [ ] T60. Completar la matriz de trazabilidad de RF-1 a RF-7 y casos límite con pruebas deterministas identificables.
+RF: RF-1 a RF-7.
+Hecho cuando: Cada cláusula funcional y caso límite de la spec referencia al menos un test que se ejecuta correctamente mediante `cargo test`.
+
+- [ ] T61. Ejecutar las verificaciones finales de formato, lint y pruebas tras cerrar las tareas pendientes.
+RF: RF-1 a RF-7.
+Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.
