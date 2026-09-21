@@ -236,10 +236,10 @@ Hecho cuando: Un servidor local verifica que URL con esquema no HTTP(S), URL ini
 RF: RF-2, RF-7.
 Hecho cuando: El ejecutable conserva la skill fallida, actualiza la correcta, informa ambos resultados y finaliza con código 1.
 
-- [ ] T60. Completar la matriz de trazabilidad de RF-1 a RF-7 y casos límite con pruebas deterministas identificables.
+- [x] T60. Completar la matriz de trazabilidad de RF-1 a RF-7 y casos límite con pruebas deterministas identificables.
 RF: RF-1 a RF-7.
 Hecho cuando: Cada cláusula funcional y caso límite de la spec referencia al menos un test que se ejecuta correctamente mediante `cargo test`.
 
-- [ ] T61. Ejecutar las verificaciones finales de formato, lint y pruebas tras cerrar las tareas pendientes.
+- [x] T61. Ejecutar las verificaciones finales de formato, lint y pruebas tras cerrar las tareas pendientes.
 RF: RF-1 a RF-7.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.

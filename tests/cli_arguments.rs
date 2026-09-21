@@ -219,3 +219,16 @@ fn update_rejects_changes_without_exactly_one_selected_skill() {
         assert!(Cli::try_parse_from(command).is_err());
     }
 }
+
+#[test]
+fn update_rejects_an_invalid_replacement_skill_name() {
+    let result = Cli::try_parse_from([
+        "rust-skgen",
+        "update",
+        "existing-skill",
+        "--name",
+        "Invalid-Skill",
+    ]);
+
+    assert!(result.is_err());
+}
