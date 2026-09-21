@@ -36,7 +36,8 @@ Los metadatos son la persistencia mínima autorizada por la especificación: ide
     "allowed_subdomains": [],
     "traversal": {
       "mode": "all"
-    }
+    },
+    "require_robots_txt": false
   },
   "content_format": "guide-with-references",
   "content_digest": "sha256:7b50fcd0d5f3a4c8b3e53b7a8585a35e42f2cfc0cb37360e6f4ecaa7f2e7166e"
@@ -48,6 +49,7 @@ Valores permitidos:
 - `scope`: `same-site`, `path-prefix`, `parent-directory`, `documentation-navigation`.
 - `site_boundary`: `exact-host`, `base-domain`, `same-origin`; solo aplica a `same-site`.
 - `traversal.mode`: `all`, `one-level`, `limited`; `limited` añade `max_pages`, entero positivo, con valor predeterminado `100`.
+- `require_robots_txt`: `true` exige obtener y validar `robots.txt`; `false` permite continuar cuando no está disponible o no es válido. El valor predeterminado es `false`.
 - `content_format`: `guide-with-references` o `organized-content`.
 
 La huella se calcula sobre el contenido gestionado renderizado de forma determinista. Una discrepancia, un metadato inválido o ausente obliga a solicitar la reconstrucción antes de actualizar. **Cubre RF-4 y RF-6.**
@@ -64,6 +66,10 @@ function build_skill(configuration, previous_skill):
     prepare an isolated pending result
 
     fetch and evaluate robots policy for the source URL
+    if robots.txt is valid: enforce its applicable rules
+    if robots.txt is missing, inaccessible, unsuccessful, or invalid:
+        fail if require_robots_txt is true
+        otherwise continue discovery
     fetch source URL; fail if inaccessible, forbidden, non-documental or redirected
     add source page to the pending set unconditionally
 
@@ -77,7 +83,8 @@ function build_skill(configuration, previous_skill):
         skip if candidate is outside the selected scope
         skip if base-domain candidate is not both explicitly authorized and linked
         fetch and evaluate robots policy for candidate
-        fail this skill if the candidate is forbidden, inaccessible or redirected
+        fail this skill if robots.txt is required but unavailable or invalid
+        fail this skill if the candidate is forbidden by valid robots.txt, inaccessible or redirected
         extract its document content; fail this skill if it is not documental
         add page to pending set
         if traversal is all: enqueue its links
@@ -109,6 +116,7 @@ rust-skgen create <source-url> <skill-name>
   [--traversal all|one-level|limited]
   [--max-pages <positive-integer>]
   [--format guide-with-references|organized-content]
+  [--require-robots-txt true|false]
   [--user-agent <value>]
 
 rust-skgen update [<skill-name>...]
@@ -120,14 +128,16 @@ rust-skgen update [<skill-name>...]
   [--traversal all|one-level|limited]
   [--max-pages <positive-integer>]
   [--format guide-with-references|organized-content]
+  [--require-robots-txt true|false]
   [--user-agent <value>]
 ```
 
 - `create` exige URL HTTP(S) sin redirección y un slug válido. Crea solo bajo `.agents/skills/<skill-name>` relativo al directorio actual.
-- Los valores predeterminados son `same-site`, `exact-host`, `all`, `guide-with-references`; `limited` usa `100` páginas si se omite `--max-pages`.
+- Los valores predeterminados son `same-site`, `exact-host`, `all`, `guide-with-references` y `require-robots-txt=false`; `limited` usa `100` páginas si se omite `--max-pages`.
 - `--site-boundary` y `--allow-subdomain` se rechazan si el alcance no es `same-site`. Un subdominio adicional requiere simultáneamente `base-domain`, `--allow-subdomain` y un enlace desde una página ya incluida.
+- Las reglas de un `robots.txt` válido se respetan siempre. Si no existe, no se puede obtener o no es válido, el descubrimiento continúa salvo que `--require-robots-txt true` lo exija; en ese caso la skill falla sin cambios parciales.
 - `update` sin nombres actualiza todas las skills con metadatos válidos de la CLI. Sin skills gestionadas, informa `No managed skills found.`
-- `update` con un nombre permite cambiar cualquier configuración. Con varios nombres, cualquier parámetro de cambio rechaza la operación completa antes de actualizar.
+- `update` con un nombre permite cambiar cualquier configuración, incluida la exigencia de `robots.txt`, y conserva esos valores en los metadatos. Con varios nombres, cualquier parámetro de cambio rechaza la operación completa antes de actualizar.
 - Si faltan metadatos, son inválidos o no coinciden con la huella de contenido, la CLI pregunta `Rebuild metadata and update this skill? [y/N]`. La ausencia de respuesta o una respuesta negativa conserva la skill sin cambios.
 - Una modificación manual no bloquea la actualización si los metadatos y la huella son válidos; el contenido generado se reemplaza.
 
@@ -176,10 +186,10 @@ Todos los nombres de tests y sus mensajes estarán en inglés; los datos de prue
 | Unidad de dominio | Slugs válidos e inválidos, esquemas HTTP(S), valores predeterminados, combinaciones de opciones y máximo de páginas. | RF-1, RF-3, RF-6 |
 | Unidad de alcance | Host y puerto exactos, mismo origen, dominio base con autorización y enlace, prefijo, directorio padre, navegación y URLs equivalentes. | RF-3 |
 | Unidad de renderizado y metadatos | Orden estable, ambos formatos, atribución, contenido derivado de fuentes, serialización, validación y discrepancia de huella. | RF-4, RF-6 |
-| Integración de red local | Respuestas HTTP correctas, redirecciones, errores HTTP, HTML no documental, límites de tiempo, reintentos, `robots.txt` permitido y prohibido. | RF-1, RF-3 |
+| Integración de red local | Respuestas HTTP correctas, redirecciones, errores HTTP, HTML no documental, límites de tiempo, reintentos, `robots.txt` permitido y prohibido, y ausencia, inaccesibilidad o contenido inválido con exigencia opcional u obligatoria. | RF-1, RF-3 |
 | Integración de almacenamiento temporal | Creación, conflicto de nombre, escritura fallida, reemplazo, renombrado, restauración y bloqueo simultáneo. | RF-1, RF-2, RF-5, RF-6 |
 | Integración de servicio | Actualización sin argumentos, selección válida y mixta, lotes que continúan tras fallo, rechazo de cambios masivos y reconstrucción aceptada o rechazada. | RF-5, RF-6, RF-7 |
-| Pruebas de CLI | Argumentos, mensajes en inglés, confirmación interactiva, salida estándar, salida de error y códigos `0`, `1` y `2`. | RF-1, RF-5, RF-6, RF-7 |
+| Pruebas de CLI | Argumentos, exigencia de `robots.txt`, mensajes en inglés, confirmación interactiva, salida estándar, salida de error y códigos `0`, `1` y `2`. | RF-1, RF-3, RF-5, RF-6, RF-7 |
 | Regresión | Una prueba determinista por corrección de error público. | RF-1 a RF-7 |
 
 La validación final ejecutará `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` cuando el proyecto sea compilable.
