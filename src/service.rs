@@ -478,6 +478,45 @@ pub fn update_skills_with_changes<F: DocumentFetcher, P: CrawlPolicy>(
     Ok(UpdateSkillsResult { outcomes })
 }
 
+/// Updates a directed selection after requesting confirmation for each skill whose metadata must
+/// be rebuilt.
+pub fn update_skills_with_changes_and_confirmation<
+    F: DocumentFetcher,
+    P: CrawlPolicy,
+    C: RebuildConfirmation,
+>(
+    selection: &[SkillName],
+    changes: UpdateSkillChanges,
+    confirmation: &C,
+    fetcher: &F,
+    policy: &P,
+    publisher: &TransactionalSkillCreator,
+) -> Result<UpdateSkillsResult, UpdateSkillsError> {
+    if selection.len() > 1 && changes.has_changes() {
+        return Err(UpdateSkillsError::ConfigurationChangesRequireSingleSelection);
+    }
+
+    let outcomes = selection
+        .iter()
+        .cloned()
+        .map(|name| UpdateSkillsOutcome {
+            result: update_skill_with_confirmation(
+                UpdateSkillRequest {
+                    current_name: name.clone(),
+                    changes: changes.clone(),
+                },
+                confirmation,
+                fetcher,
+                policy,
+                publisher,
+            ),
+            name,
+        })
+        .collect();
+
+    Ok(UpdateSkillsResult { outcomes })
+}
+
 /// Rebuilds one managed skill using its persisted settings plus the requested changes.
 pub fn update_skill<F: DocumentFetcher, P: CrawlPolicy>(
     request: UpdateSkillRequest,
