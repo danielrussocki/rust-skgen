@@ -100,6 +100,17 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 
 - Cuando la CLI obtenga una respuesta correcta para una URL de documentación cuyo tipo de contenido no sea HTML, deberá omitir esa URL y su contenido de la skill, y deberá continuar el descubrimiento y la generación con las demás URLs disponibles.
 
+### RF-10. Descubrimiento previo mediante sitemap
+
+- Cuando la persona usuaria cree o actualice una skill, antes de recorrer enlaces HTML la CLI deberá buscar un sitemap del sitio de documentación mediante una lista determinista de ubicaciones convencionales que incluya `/sitemap.xml`, `/sitemap_index.xml`, `/sitemap-index.xml` y `/sitemap.php`.
+- Cuando una ubicación convencional responda con un sitemap XML válido, la CLI deberá obtener sus URLs canónicas de documentación antes de iniciar el recorrido de enlaces HTML.
+- Cuando un sitemap XML válido sea un índice de sitemaps, la CLI deberá procesar sus sitemaps referenciados de forma determinista antes de iniciar el recorrido de enlaces HTML.
+- Cuando un sitemap proporcione URLs canónicas dentro del alcance, el límite de sitio y el modo de recorrido configurados, la CLI deberá usarlas como candidatas de descubrimiento y no deberá extraer una misma URL más de una vez.
+- Cuando un sitemap proporcione una URL fuera del alcance, del límite de sitio o prohibida por un archivo `robots.txt` válido o por las condiciones de acceso aplicables, la CLI no deberá extraer esa URL.
+- Cuando ninguna ubicación convencional proporcione un sitemap XML válido, cuando un sitemap no pueda obtenerse, sea inválido, redirija o responda con un error HTTP, la CLI deberá continuar con el descubrimiento normal mediante enlaces HTML y no deberá fallar la operación solo por ese motivo.
+- Cuando el sitemap no proporcione páginas de documentación válidas, la CLI deberá continuar con el descubrimiento normal mediante enlaces HTML.
+- Cuando el sitio publique un sitemap XML válido y el recorrido posterior por enlaces HTML encuentre páginas adicionales dentro del alcance, la CLI deberá incluir también esas páginas conforme al modo de recorrido configurado.
+
 ## Requisitos no funcionales
 
 - La CLI deberá respetar las reglas aplicables de todo archivo `robots.txt` válido que encuentre, los términos de uso aplicables y los límites de acceso de cada sitio; salvo configuración expresa, la ausencia de `robots.txt` no impedirá el descubrimiento.
@@ -116,6 +127,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Se justifican dependencias para analizar y normalizar URLs, resolver enlaces relativos y aplicar los límites de descubrimiento. Cubre RF-1 y RF-3.
 - Se justifican dependencias para identificar dominios registrables mediante una lista de sufijos públicos al aplicar el límite de mismo dominio base. Cubre RF-3.
 - Se justifican dependencias para analizar HTML de forma estructurada y extraer enlaces, navegación y contenido documental sin interpretar HTML como texto no estructurado. Cubre RF-3 y RF-4.
+- Se justifican dependencias para analizar XML de sitemap de forma estructurada, distinguir índices de sitemaps y obtener URLs canónicas sin interpretar XML como texto no estructurado. Cubre RF-10.
 - Se justifican dependencias para serializar y validar los metadatos JSON que identifican una skill gestionada y conservan su configuración de actualización. Cubre RF-4, RF-5 y RF-6.
 - Se justifican dependencias para calcular y verificar una huella criptográfica del contenido gestionado y detectar modificaciones antes de reconstruir metadatos o actualizar la skill. Cubre RF-4 y RF-6.
 - Se justifican dependencias para analizar y validar los argumentos de los comandos de la CLI de forma consistente con su contrato público. Cubre RF-1, RF-3, RF-5 y RF-6.
@@ -140,6 +152,9 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Una skill tiene metadatos faltantes, inválidos o que no coinciden con su contenido, y la persona usuaria acepta o rechaza reconstruirlos.
 - Una skill gestionada fue modificada manualmente antes de actualizarla.
 - La escritura falla o dos ejecuciones intentan modificar la misma skill simultáneamente.
+- El sitio no publica ninguna de las ubicaciones convencionales de sitemap, todas responden con 404, devuelven contenido no XML, son inválidas, redirigen o responden con otro error: la CLI continúa con el descubrimiento mediante enlaces HTML.
+- Un sitemap válido es un índice que referencia uno o varios sitemaps, contiene URLs duplicadas o contiene URLs que solo difieren por fragmento o parámetros de consulta: la CLI procesa los sitemaps y extrae cada URL canónica admisible una sola vez.
+- Un sitemap válido contiene URLs fuera del alcance o límite de sitio, URLs prohibidas por `robots.txt` o por las condiciones de acceso aplicables, o no contiene ninguna página documental válida: esas URLs se omiten y la CLI continúa con el recorrido normal de enlaces HTML.
 
 ## Fuera de alcance
 
@@ -160,6 +175,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Una actualización de varias skills continúa tras un fallo y comunica el resultado individual de cada una.
 - La CLI identifica las skills gestionadas mediante metadatos validables y solicita confirmación antes de reconstruirlos.
 - La CLI rechaza redirecciones, URLs fuera del alcance y accesos prohibidos sin generar o actualizar parcialmente la skill afectada.
+- La CLI consulta las ubicaciones convencionales de sitemap antes del recorrido de enlaces HTML, usa las URLs canónicas admisibles que encuentre y continúa normalmente cuando no hay un sitemap utilizable.
 - Los requisitos funcionales y los casos límite cuentan con pruebas deterministas actualizadas.
 
 ## Dudas abiertas
