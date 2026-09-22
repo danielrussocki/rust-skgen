@@ -399,3 +399,39 @@ Hecho cuando: La documentación describe las ubicaciones convencionales, índice
 - [x] T100. Ejecutar las verificaciones finales y comprobar la cobertura de RF-10.
 RF: RF-1 a RF-10.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y `tests/traceability.rs` exige cobertura identificable para RF-1 a RF-10.
+
+- [ ] T101. Definir el candidato de enlace contextual para conservar URL canónica, texto de anclaje y pertenencia a navegación durante el descubrimiento.
+RF: RF-11.
+Hecho cuando: Tests unitarios construyen candidatos desde URL, ancla y navegación, y verifican que la normalización de URL conserva la información contextual necesaria para priorizarlos.
+
+- [ ] T102. Extraer candidatos de enlaces HTML con su texto de anclaje y contexto de navegación, sin cambiar las reglas actuales de resolución de URLs ni de alcance.
+RF: RF-3, RF-11.
+Hecho cuando: Tests de extracción devuelven URLs HTTP(S) absolutas con su texto de anclaje y señalan correctamente los enlaces dentro de elementos de navegación, mientras descartan los esquemas no HTTP(S).
+
+- [ ] T103. Implementar y probar la puntuación determinista de señales positivas en ruta, texto de anclaje y navegación.
+RF: RF-11.
+Hecho cuando: Tests unitarios verifican, sin distinguir mayúsculas de minúsculas, que `docs`, `guide`, `api`, `reference` y `components` aumentan la prioridad desde cada una de las tres fuentes de señal.
+
+- [ ] T104. Implementar y probar la puntuación determinista de señales penalizadas y de destinos de imagen, recurso estático o red social.
+RF: RF-11.
+Hecho cuando: Tests unitarios verifican que cada término penalizado y cada tipo de destino indicado reduce la prioridad sin convertir por sí mismo el candidato en no admisible.
+
+- [ ] T105. Ordenar deterministamente los candidatos HTML por prioridad y URL canónica antes de extraerlos.
+RF: RF-3, RF-11.
+Hecho cuando: Un test de descubrimiento verifica que una URL con prioridad superior se solicita antes que una penalizada y que dos candidatas empatadas se solicitan en orden estable por URL canónica.
+
+- [ ] T106. Aplicar la misma priorización a las candidatas de sitemap sin alterar que el sitemap se procese antes que los enlaces HTML.
+RF: RF-3, RF-10, RF-11.
+Hecho cuando: Un test con varias URLs de sitemap y enlaces HTML verifica que el sitemap conserva precedencia, que sus candidatas se ordenan por prioridad y que los enlaces HTML se ordenan después con las mismas reglas.
+
+- [ ] T107. Añadir regresiones para máximo de páginas, señales mixtas y restricciones de admisibilidad durante la priorización.
+RF: RF-3, RF-10, RF-11.
+Hecho cuando: Tests verifican que el máximo extrae primero candidatas de mayor prioridad, que señales positivas y penalizadas producen un orden estable y que alcance, límite de sitio, `robots.txt` y política de acceso no cambian por la prioridad.
+
+- [ ] T108. Actualizar README, plan técnico y matriz de trazabilidad con RF-11, sus escenarios EARS y casos límite.
+RF: RF-11.
+Hecho cuando: La documentación describe las señales, el desempate, el efecto sobre `max_pages` y las restricciones no alterables, y `docs/traceability.md` referencia una prueba determinista para cada cláusula y caso límite de RF-11.
+
+- [ ] T109. Ejecutar las verificaciones finales y comprobar la cobertura de RF-11.
+RF: RF-1 a RF-11.
+Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y `tests/traceability.rs` exige cobertura identificable para RF-1 a RF-11.

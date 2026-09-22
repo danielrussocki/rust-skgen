@@ -111,6 +111,21 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Cuando el sitemap no proporcione páginas de documentación válidas, la CLI deberá continuar con el descubrimiento normal mediante enlaces HTML.
 - Cuando el sitio publique un sitemap XML válido y el recorrido posterior por enlaces HTML encuentre páginas adicionales dentro del alcance, la CLI deberá incluir también esas páginas conforme al modo de recorrido configurado.
 
+### RF-11. Priorización determinista de enlaces
+
+- Cuando la CLI descubra enlaces HTML o URLs canónicas de un sitemap que ya cumplan el alcance, el límite de sitio, el modo de recorrido y las reglas aplicables de `robots.txt` y acceso, deberá asignarles una prioridad determinista antes de extraerlos.
+- La CLI deberá aumentar la prioridad de una URL cuando su ruta, su texto de anclaje o el elemento HTML de navegación que la contiene incluya, sin distinguir mayúsculas de minúsculas, términos indicativos de documentación como `docs`, `guide`, `api`, `reference` o `components`.
+- La CLI deberá reducir la prioridad de una URL cuando su ruta, su texto de anclaje o el elemento HTML de navegación que la contiene incluya, sin distinguir mayúsculas de minúsculas, términos como `blog`, `changelog`, `releases`, `supported-browsers`, `privacy`, `terms` o `careers`, o cuando apunte a una imagen, un recurso estático o un enlace de red social.
+- Cuando varias URLs tengan la misma prioridad, la CLI deberá establecer su orden de extracción de forma determinista.
+- La CLI no deberá omitir una URL admisible únicamente por tener una prioridad reducida; la prioridad deberá determinar el orden de extracción y, cuando exista un máximo de páginas, cuáles URLs se extraen antes de alcanzar dicho máximo.
+- La CLI no deberá usar la prioridad para admitir URLs fuera del alcance o del límite de sitio, ignorar reglas aplicables de `robots.txt` o condiciones de acceso, alterar el descubrimiento previo mediante sitemap ni eludir ninguna otra regla de seguridad.
+
+### Escenarios EARS de RF-11
+
+- Cuando la CLI descubra enlaces admisibles y uno contenga una señal de documentación de mayor prioridad que otro, deberá extraer primero el enlace con mayor prioridad.
+- Cuando la CLI descubra enlaces admisibles y un enlace contenga una señal penalizada, deberá asignarle una prioridad menor sin omitirlo únicamente por esa señal.
+- Cuando la CLI encuentre una URL fuera del alcance, prohibida por `robots.txt` o no admisible por las condiciones de acceso, no deberá extraerla aunque sus señales le asignen una prioridad alta.
+
 ## Requisitos no funcionales
 
 - La CLI deberá respetar las reglas aplicables de todo archivo `robots.txt` válido que encuentre, los términos de uso aplicables y los límites de acceso de cada sitio; salvo configuración expresa, la ausencia de `robots.txt` no impedirá el descubrimiento.
@@ -155,6 +170,10 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - El sitio no publica ninguna de las ubicaciones convencionales de sitemap, todas responden con 404, devuelven contenido no XML, son inválidas, redirigen o responden con otro error: la CLI continúa con el descubrimiento mediante enlaces HTML.
 - Un sitemap válido es un índice que referencia uno o varios sitemaps, contiene URLs duplicadas o contiene URLs que solo difieren por fragmento o parámetros de consulta: la CLI procesa los sitemaps y extrae cada URL canónica admisible una sola vez.
 - Un sitemap válido contiene URLs fuera del alcance o límite de sitio, URLs prohibidas por `robots.txt` o por las condiciones de acceso aplicables, o no contiene ninguna página documental válida: esas URLs se omiten y la CLI continúa con el recorrido normal de enlaces HTML.
+- Una URL admisible contiene a la vez señales de documentación y señales penalizadas: la CLI le asigna una prioridad mediante reglas deterministas y conserva un orden de extracción estable.
+- Varias URLs admisibles tienen la misma prioridad: la CLI las extrae en un orden determinista.
+- Una URL con señales penalizadas está dentro del alcance y es admisible: la CLI no la omite únicamente por esas señales, pero la extrae después de URLs de prioridad superior mientras no se alcance el máximo de páginas.
+- Una URL con señales de documentación de prioridad alta está fuera del alcance, prohibida por `robots.txt`, no cumple el límite de sitio o infringe las condiciones de acceso aplicables: la CLI la omite conforme a esas reglas sin que la prioridad las altere.
 
 ## Fuera de alcance
 
@@ -176,6 +195,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - La CLI identifica las skills gestionadas mediante metadatos validables y solicita confirmación antes de reconstruirlos.
 - La CLI rechaza redirecciones, URLs fuera del alcance y accesos prohibidos sin generar o actualizar parcialmente la skill afectada.
 - La CLI consulta las ubicaciones convencionales de sitemap antes del recorrido de enlaces HTML, usa las URLs canónicas admisibles que encuentre y continúa normalmente cuando no hay un sitemap utilizable.
+- La CLI prioriza de forma determinista las URLs admisibles para extraer primero las más indicativas de documentación, sin alterar las reglas de alcance, sitemap, `robots.txt`, acceso o seguridad.
 - Los requisitos funcionales y los casos límite cuentan con pruebas deterministas actualizadas.
 
 ## Dudas abiertas
