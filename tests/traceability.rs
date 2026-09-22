@@ -41,8 +41,23 @@ fn traceability_covers_persisted_robots_requirement_and_unavailable_related_sour
 }
 
 #[test]
+fn traceability_covers_related_non_html_responses() {
+    for reference in [
+        "src/discover.rs::tests::related_non_html_response_is_skipped_while_remaining_html_pages_are_discovered",
+        "tests/skill_creation_service.rs::creates_a_skill_while_skipping_a_related_non_html_response",
+        "tests/skill_update_service.rs::updating_a_skill_skips_a_related_non_html_response",
+        "tests/cli_integration.rs::create_and_update_skip_related_non_html_documentation",
+    ] {
+        assert!(
+            TRACEABILITY.contains(reference),
+            "missing traceability reference: {reference}"
+        );
+    }
+}
+
+#[test]
 fn traceability_lists_deterministic_coverage_for_every_functional_requirement() {
-    for requirement in 1..=8 {
+    for requirement in 1..=9 {
         let clause = format!("RF-{requirement}:");
         assert!(
             TRACEABILITY.contains(&clause),

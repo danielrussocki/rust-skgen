@@ -229,6 +229,57 @@ fn related_not_found_server() -> (String, thread::JoinHandle<()>) {
     (format!("http://{address}/start"), handle)
 }
 
+fn related_non_html_server() -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let mut start_requests = 0;
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    stream.set_nonblocking(false).unwrap();
+                    let mut request = [0; 1024];
+                    let length = stream.read(&mut request).unwrap();
+                    let request = String::from_utf8_lossy(&request[..length]);
+                    let (status, content_type, body) = if request.starts_with("GET /robots.txt ") {
+                        ("200 OK", "text/plain", "User-agent: *\nAllow: /\n")
+                    } else if request.starts_with("GET /data ") {
+                        ("200 OK", "application/json", "{\"version\":1}")
+                    } else if request.starts_with("GET /related ") {
+                        (
+                            "200 OK",
+                            "text/html",
+                            "<main><p>Related documentation.</p></main>",
+                        )
+                    } else {
+                        start_requests += 1;
+                        let body = if start_requests == 1 {
+                            "<main><p>Initial documentation.</p><a href=\"/data\">Data</a><a href=\"/related\">Related</a></main>"
+                        } else {
+                            "<main><p>Updated documentation.</p><a href=\"/data\">Data</a><a href=\"/related\">Related</a></main>"
+                        };
+                        ("200 OK", "text/html", body)
+                    };
+                    write!(
+                        stream,
+                        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                    .unwrap();
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("test server failed to accept a request: {error}"),
+            }
+        }
+    });
+    (format!("http://{address}/start"), handle)
+}
+
 #[test]
 fn create_publishes_only_under_the_current_working_directory_skills_root() {
     let working_directory = TemporaryDirectory::new();
@@ -831,6 +882,39 @@ fn create_and_update_publish_unavailable_related_documentation_after_http_not_fo
     let updated_content = fs::read_to_string(skill_path).unwrap();
     assert!(updated_content.contains("Updated documentation."));
     assert!(updated_content.contains("Documentation is unavailable for this source."));
+}
+
+#[test]
+fn create_and_update_skip_related_non_html_documentation() {
+    let working_directory = TemporaryDirectory::new();
+    let (source_url, server) = related_non_html_server();
+    let skill_path = working_directory
+        .path
+        .join(".agents/skills/related-non-html-docs/SKILL.md");
+
+    let created = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["create", &source_url, "related-non-html-docs"])
+        .output()
+        .unwrap();
+    assert!(created.status.success());
+    let initial_content = fs::read_to_string(&skill_path).unwrap();
+    assert!(initial_content.contains("Initial documentation."));
+    assert!(initial_content.contains("Related documentation."));
+    assert!(!initial_content.contains("/data"));
+
+    let updated = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["update", "related-non-html-docs"])
+        .output()
+        .unwrap();
+    server.join().unwrap();
+
+    assert!(updated.status.success());
+    let updated_content = fs::read_to_string(skill_path).unwrap();
+    assert!(updated_content.contains("Updated documentation."));
+    assert!(updated_content.contains("Related documentation."));
+    assert!(!updated_content.contains("/data"));
 }
 
 #[test]

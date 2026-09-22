@@ -17,6 +17,12 @@ use url::Url;
 /// Marks a component that discovers documentation pages.
 pub trait SiteDiscoverer {}
 
+enum FetchOutcome {
+    Document(crate::fetch::FetchedDocument),
+    Unavailable,
+    Skipped,
+}
+
 /// Error returned while discovering documentation pages.
 #[derive(Debug)]
 pub enum DiscoveryError {
@@ -84,11 +90,14 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
     policy: &P,
 ) -> Result<Vec<DocumentationSource>, DiscoveryError> {
     let source_canonical = normalize_visit_url(&source_url);
-    let source_document = fetch_document(source_url.clone(), true, configuration, fetcher, policy)?
-        .ok_or_else(|| DiscoveryError::UnexpectedStatus {
+    let FetchOutcome::Document(source_document) =
+        fetch_document(source_url.clone(), true, configuration, fetcher, policy)?
+    else {
+        return Err(DiscoveryError::UnexpectedStatus {
             url: source_url.clone(),
             status: 404,
-        })?;
+        });
+    };
     let source_page = extract_document(source_url.clone(), source_document.body())
         .map_err(DiscoveryError::Extraction)?;
     let navigation_urls = navigation_urls(&source_url, source_document.body());
@@ -108,12 +117,15 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
             continue;
         }
 
-        let Some(document) =
-            fetch_document(candidate.clone(), false, configuration, fetcher, policy)?
-        else {
-            pages.push(DocumentationSource::unavailable(candidate));
-            continue;
-        };
+        let document =
+            match fetch_document(candidate.clone(), false, configuration, fetcher, policy)? {
+                FetchOutcome::Document(document) => document,
+                FetchOutcome::Unavailable => {
+                    pages.push(DocumentationSource::unavailable(candidate));
+                    continue;
+                }
+                FetchOutcome::Skipped => continue,
+            };
         let page = extract_document(candidate.clone(), document.body())
             .map_err(DiscoveryError::Extraction)?;
         pages.push(DocumentationSource::Extracted(page));
@@ -145,7 +157,7 @@ fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
     configuration: &DiscoveryConfiguration,
     fetcher: &F,
     policy: &P,
-) -> Result<Option<crate::fetch::FetchedDocument>, DiscoveryError> {
+) -> Result<FetchOutcome, DiscoveryError> {
     if !policy
         .allows_with_robots_requirement(&url, configuration.requires_robots_txt())
         .map_err(DiscoveryError::Policy)?
@@ -158,7 +170,7 @@ fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
         return Err(DiscoveryError::Redirect(url));
     }
     if document.status() == 404 && !is_source {
-        return Ok(None);
+        return Ok(FetchOutcome::Unavailable);
     }
     if !(200..300).contains(&document.status()) {
         return Err(DiscoveryError::UnexpectedStatus {
@@ -167,13 +179,16 @@ fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
         });
     }
     if !document.is_html() {
+        if !is_source {
+            return Ok(FetchOutcome::Skipped);
+        }
         return Err(DiscoveryError::NonHtmlContent {
             url,
             content_type: document.content_type().unwrap_or_default().to_owned(),
         });
     }
 
-    Ok(Some(document))
+    Ok(FetchOutcome::Document(document))
 }
 
 fn source_links(source_url: &Url, html: &str, scope: DiscoveryScope) -> BTreeSet<Url> {
@@ -868,6 +883,62 @@ mod tests {
         assert_eq!(
             fetcher.fetched_urls.into_inner(),
             vec![source_url, missing_url]
+        );
+    }
+
+    #[test]
+    fn related_non_html_response_is_skipped_while_remaining_html_pages_are_discovered() {
+        let source_url = url("/start");
+        let non_html_url = url("/data");
+        let related_url = url("/related");
+        let fetcher = StatusFetcher {
+            documents: BTreeMap::from([
+                (
+                    source_url.clone(),
+                    FetchedDocument::new(
+                        source_url.clone(),
+                        200,
+                        format!(
+                            "{}<a href=\"/data\">Data</a><a href=\"/related\">Related</a>",
+                            document("Start")
+                        ),
+                    ),
+                ),
+                (
+                    non_html_url.clone(),
+                    FetchedDocument::new_with_content_type(
+                        non_html_url.clone(),
+                        200,
+                        "{\"version\":1}".to_owned(),
+                        "application/json".to_owned(),
+                    ),
+                ),
+                (
+                    related_url.clone(),
+                    FetchedDocument::new(related_url.clone(), 200, document("Related")),
+                ),
+            ]),
+            fetched_urls: RefCell::new(Vec::new()),
+        };
+
+        let pages = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("a related non-HTML response should not abort discovery");
+
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.source_url().clone())
+                .collect::<Vec<_>>(),
+            vec![related_url.clone(), source_url.clone()]
+        );
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![source_url, non_html_url, related_url]
         );
     }
 

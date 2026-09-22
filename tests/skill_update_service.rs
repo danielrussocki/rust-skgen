@@ -159,6 +159,62 @@ fn updating_a_skill_publishes_an_unavailable_related_page_notice_after_not_found
 }
 
 #[test]
+fn updating_a_skill_skips_a_related_non_html_response() {
+    let skills = TemporarySkillsDirectory::new();
+    let name = SkillName::parse("related-non-html-docs").unwrap();
+    let source_url = Url::parse("https://docs.example.test/start").unwrap();
+    let non_html_url = Url::parse("https://docs.example.test/data").unwrap();
+    let related_url = Url::parse("https://docs.example.test/related").unwrap();
+    let creator = TransactionalSkillCreator::new(skills.path());
+    creator
+        .create(&name, "# Previous skill\n", &initial_metadata())
+        .unwrap();
+    let fetcher = StatusDocumentationFetcher {
+        documents: BTreeMap::from([
+            (
+                source_url.clone(),
+                FetchedDocument::new(
+                    source_url.clone(),
+                    200,
+                    "<main><p>Updated documentation.</p><a href=\"/data\">Data</a><a href=\"/related\">Related</a></main>".to_owned(),
+                ),
+            ),
+            (
+                non_html_url.clone(),
+                FetchedDocument::new_with_content_type(
+                    non_html_url.clone(),
+                    200,
+                    "{\"version\":1}".to_owned(),
+                    "application/json".to_owned(),
+                ),
+            ),
+            (
+                related_url.clone(),
+                FetchedDocument::new(
+                    related_url.clone(),
+                    200,
+                    "<main><p>Related documentation.</p></main>".to_owned(),
+                ),
+            ),
+        ]),
+    };
+
+    update_skill(
+        UpdateSkillRequest::new(name.clone()),
+        &fetcher,
+        &AllowAllPolicy,
+        &creator,
+    )
+    .expect("a related non-HTML response should not prevent an update");
+
+    let content =
+        fs::read_to_string(skills.path().join(name.as_str()).join(SKILL_FILE_NAME)).unwrap();
+    assert!(content.contains("Updated documentation."));
+    assert!(content.contains("Related documentation."));
+    assert!(!content.contains(&non_html_url.to_string()));
+}
+
+#[test]
 fn updating_all_managed_skills_reports_an_empty_result_when_none_exist() {
     let skills = TemporarySkillsDirectory::new();
 

@@ -185,6 +185,63 @@ fn creates_a_complete_skill_when_a_related_page_returns_not_found() {
 }
 
 #[test]
+fn creates_a_skill_while_skipping_a_related_non_html_response() {
+    let skills = TemporarySkillsDirectory::new();
+    let source_url = Url::parse("https://docs.example.test/start").unwrap();
+    let non_html_url = Url::parse("https://docs.example.test/data").unwrap();
+    let related_url = Url::parse("https://docs.example.test/related").unwrap();
+    let name = SkillName::parse("related-non-html-docs").unwrap();
+    let fetcher = StatusDocumentationFetcher {
+        documents: BTreeMap::from([
+            (
+                source_url.clone(),
+                FetchedDocument::new(
+                    source_url.clone(),
+                    200,
+                    "<main><p>Start documentation.</p><a href=\"/data\">Data</a><a href=\"/related\">Related</a></main>".to_owned(),
+                ),
+            ),
+            (
+                non_html_url.clone(),
+                FetchedDocument::new_with_content_type(
+                    non_html_url.clone(),
+                    200,
+                    "{\"version\":1}".to_owned(),
+                    "application/json".to_owned(),
+                ),
+            ),
+            (
+                related_url.clone(),
+                FetchedDocument::new(
+                    related_url.clone(),
+                    200,
+                    "<main><p>Related documentation.</p></main>".to_owned(),
+                ),
+            ),
+        ]),
+    };
+    let request = CreateSkillRequest::new(
+        name.clone(),
+        SourceUrl::parse(source_url.as_str()).unwrap(),
+        DiscoveryConfiguration::default(),
+    );
+
+    create_skill(
+        request,
+        &fetcher,
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    )
+    .expect("a related non-HTML response should not prevent skill creation");
+
+    let content =
+        fs::read_to_string(skills.path().join(name.as_str()).join(SKILL_FILE_NAME)).unwrap();
+    assert!(content.contains("Start documentation."));
+    assert!(content.contains("Related documentation."));
+    assert!(!content.contains(&non_html_url.to_string()));
+}
+
+#[test]
 fn does_not_publish_a_skill_when_access_conditions_forbid_a_related_page() {
     let skills = TemporarySkillsDirectory::new();
     let source_url = Url::parse("https://docs.example.test/start").unwrap();
