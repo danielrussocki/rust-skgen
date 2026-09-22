@@ -1,6 +1,6 @@
 //! HTML documentation extraction boundary.
 
-use crate::domain::DocumentationPage;
+use crate::domain::{DocumentationPage, LinkCandidate};
 use scraper::{Html, Selector};
 use url::Url;
 
@@ -66,6 +66,58 @@ pub fn extract_links(source_url: &Url, html: &str) -> Vec<Url> {
         .filter_map(|element| element.value().attr("href"))
         .filter_map(|href| source_url.join(href).ok())
         .filter(|url| matches!(url.scheme(), "http" | "https"))
+        .collect()
+}
+
+/// Extracts contextual HTTP(S) link candidates and resolves relative references.
+pub fn extract_link_candidates(source_url: &Url, html: &str) -> Vec<LinkCandidate> {
+    let document = Html::parse_document(html);
+    let Ok(selector) = Selector::parse("a[href]") else {
+        return Vec::new();
+    };
+    let Ok(navigation_selector) = Selector::parse("nav") else {
+        return Vec::new();
+    };
+    let navigation_contexts = document
+        .select(&navigation_selector)
+        .flat_map(|navigation| {
+            let navigation_text = normalize_text(&navigation.text().collect::<String>());
+            navigation.select(&selector).filter_map(move |anchor| {
+                anchor
+                    .value()
+                    .attr("href")
+                    .map(|href| (href.to_owned(), navigation_text.clone()))
+            })
+        })
+        .collect::<Vec<_>>();
+
+    document
+        .select(&selector)
+        .filter_map(|element| {
+            let href = element.value().attr("href")?;
+            let url = source_url.join(href).ok()?;
+            matches!(url.scheme(), "http" | "https").then(|| {
+                let anchor_text = normalize_text(&element.text().collect::<String>());
+                let is_navigation = element.ancestors().any(|ancestor| {
+                    ancestor
+                        .value()
+                        .as_element()
+                        .is_some_and(|element| element.name() == "nav")
+                });
+                let navigation_text = is_navigation.then(|| {
+                    navigation_contexts
+                        .iter()
+                        .find(|(navigation_href, _)| navigation_href == href)
+                        .map(|(_, text)| text.clone())
+                        .unwrap_or_default()
+                });
+
+                match navigation_text {
+                    Some(text) => LinkCandidate::with_navigation_text(url, anchor_text, text),
+                    None => LinkCandidate::new(url, anchor_text, false),
+                }
+            })
+        })
         .collect()
 }
 

@@ -123,6 +123,17 @@ Before following HTML links, discovery checks `/sitemap.xml`, `/sitemap_index.xm
 canonical candidates subject to scope, traversal, robots, and access policies. Unusable sitemap
 responses fall back to normal HTML-link discovery.
 
+### Link prioritization
+
+Admissible sitemap and HTML candidates are fetched by descending documentation priority, with
+their canonical URL as the stable tie-breaker. `docs`, `guide`, `api`, `reference`, and
+`components` in a URL path, anchor, or containing navigation element increase priority.
+`blog`, `changelog`, `releases`, `supported-browsers`, `privacy`, `terms`, and `careers`, plus
+image, static-resource, and social-media destinations reduce it. Reduced priority never excludes
+a candidate: it only affects ordering and therefore which pages are reached before `--max-pages`.
+Sitemap candidates still precede HTML candidates, and scope, site boundary, robots, and access
+policies cannot be bypassed by priority.
+
 Examples:
 
 ```powershell

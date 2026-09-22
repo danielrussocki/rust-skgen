@@ -234,6 +234,58 @@ impl From<DocumentationPage> for DocumentationSource {
     }
 }
 
+/// A related URL with the HTML context used to prioritize its discovery.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LinkCandidate {
+    url: Url,
+    anchor_text: String,
+    is_navigation: bool,
+    navigation_text: String,
+}
+
+impl LinkCandidate {
+    /// Creates a candidate with its visit URL normalized while retaining HTML context.
+    pub fn new(mut url: Url, anchor_text: String, is_navigation: bool) -> Self {
+        url.set_query(None);
+        url.set_fragment(None);
+        Self {
+            url,
+            anchor_text,
+            is_navigation,
+            navigation_text: String::new(),
+        }
+    }
+
+    /// Creates a candidate contained in a navigation element with its text context.
+    pub fn with_navigation_text(url: Url, anchor_text: String, navigation_text: String) -> Self {
+        let mut candidate = Self::new(url, anchor_text, true);
+        candidate.navigation_text = navigation_text;
+        candidate
+    }
+
+    /// Returns the canonical URL used for discovery and deterministic ordering.
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
+
+    /// Returns the normalized visible text of the candidate anchor.
+    pub fn anchor_text(&self) -> &str {
+        &self.anchor_text
+    }
+
+    /// Returns whether the anchor was contained in a navigation element.
+    pub fn is_navigation(&self) -> bool {
+        self.is_navigation
+    }
+
+    /// Returns text from the containing navigation element, when present.
+    pub fn navigation_text(&self) -> &str {
+        &self.navigation_text
+    }
+}
+
+impl SkillModel for LinkCandidate {}
+
 /// Determines which related documentation URLs may be discovered.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum DiscoveryScope {

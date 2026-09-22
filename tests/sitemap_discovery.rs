@@ -182,6 +182,62 @@ fn visits_in_scope_sitemap_candidates_before_html_links_and_includes_later_html_
 }
 
 #[test]
+fn prioritizes_sitemap_candidates_before_html_candidates() {
+    let source = Url::parse("https://docs.example.test/start").unwrap();
+    let sitemap = Url::parse("https://docs.example.test/sitemap.xml").unwrap();
+    let guide = Url::parse("https://docs.example.test/guide").unwrap();
+    let blog = Url::parse("https://docs.example.test/blog").unwrap();
+    let html_page = Url::parse("https://docs.example.test/reference").unwrap();
+    let fetcher = LocalFetcher {
+        documents: BTreeMap::from([
+            (
+                source.clone(),
+                html(
+                    source.clone(),
+                    "<main><p>Start</p><a href=\"/reference\">Reference</a></main>",
+                ),
+            ),
+            (
+                sitemap.clone(),
+                FetchedDocument::new_with_content_type(
+                    sitemap.clone(),
+                    200,
+                    format!(
+                        "<urlset><url><loc>{blog}</loc></url><url><loc>{guide}</loc></url></urlset>"
+                    ),
+                    "application/xml".to_owned(),
+                ),
+            ),
+            (
+                guide.clone(),
+                html(guide.clone(), "<main><p>Guide</p></main>"),
+            ),
+            (blog.clone(), html(blog.clone(), "<main><p>Blog</p></main>")),
+            (
+                html_page.clone(),
+                html(html_page.clone(), "<main><p>Reference</p></main>"),
+            ),
+        ]),
+        requested: RefCell::new(Vec::new()),
+    };
+
+    discover_all(
+        source.clone(),
+        &DiscoveryConfiguration::default(),
+        &fetcher,
+        &AllowAll,
+    )
+    .expect("sitemap and HTML candidates should be discovered");
+
+    let requests = fetcher.requested.into_inner();
+    assert_eq!(requests[0], source);
+    assert_eq!(requests[1], sitemap);
+    assert_eq!(requests[2], guide);
+    assert_eq!(requests[3], blog);
+    assert_eq!(requests[4], html_page);
+}
+
+#[test]
 fn sitemap_candidates_obey_scope_deduplication_and_traversal_limits() {
     let source = Url::parse("https://docs.example.test/docs/guide/start").unwrap();
     let sitemap = Url::parse("https://docs.example.test/sitemap.xml").unwrap();

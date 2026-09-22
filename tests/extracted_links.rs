@@ -1,4 +1,4 @@
-use rust_skgen::extract::extract_links;
+use rust_skgen::extract::{extract_link_candidates, extract_links};
 use url::Url;
 
 #[test]
@@ -43,4 +43,33 @@ fn discards_links_with_non_http_schemes() {
         extract_links(&source_url, html),
         vec![Url::parse("https://docs.example.com/next").expect("expected URL must be valid")]
     );
+}
+
+#[test]
+fn extracts_http_candidates_with_anchor_text_and_navigation_context() {
+    let source_url =
+        Url::parse("https://docs.example.com/guide/").expect("test source URL must be valid");
+    let candidates = extract_link_candidates(
+        &source_url,
+        r#"
+            <nav><a href="intro"> Introduction </a></nav>
+            <a href="/reference">API Reference</a>
+            <a href="mailto:docs@example.com">Email</a>
+        "#,
+    );
+
+    assert_eq!(candidates.len(), 2);
+    assert_eq!(
+        candidates[0].url().as_str(),
+        "https://docs.example.com/guide/intro"
+    );
+    assert_eq!(candidates[0].anchor_text(), "Introduction");
+    assert!(candidates[0].is_navigation());
+    assert_eq!(candidates[0].navigation_text(), "Introduction");
+    assert_eq!(
+        candidates[1].url().as_str(),
+        "https://docs.example.com/reference"
+    );
+    assert_eq!(candidates[1].anchor_text(), "API Reference");
+    assert!(!candidates[1].is_navigation());
 }

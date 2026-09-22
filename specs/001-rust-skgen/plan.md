@@ -2,7 +2,7 @@
 
 ## Alcance y trazabilidad
 
-Este plan implementa exclusivamente la especificación 001. La creación, protección frente a sobrescritura, descubrimiento, contenido, actualización, resultado, gestión de URLs no encontradas, omisión de recursos no HTML y descubrimiento previo por sitemap se cubren respectivamente en RF-1 a RF-10.
+Este plan implementa exclusivamente la especificación 001. La creación, protección frente a sobrescritura, descubrimiento, contenido, actualización, resultado, gestión de URLs no encontradas, omisión de recursos no HTML, descubrimiento previo por sitemap y priorización determinista se cubren respectivamente en RF-1 a RF-11.
 
 ## Estructura de módulos
 
@@ -12,7 +12,7 @@ Este plan implementa exclusivamente la especificación 001. La creación, protec
 | `domain` | Define los tipos validados: nombre de skill, URL de origen, configuración de descubrimiento, formato, metadatos, fuentes documentales extraídas o no disponibles, skill normalizada y resultados. | RF-1, RF-3, RF-4, RF-6, RF-8 |
 | `fetch` | Obtiene recursos HTTP(S), sin seguir redirecciones, aplica `User-Agent`, tiempos de espera, reintentos acotados y concurrencia máxima de una solicitud. | RF-1, RF-3, RF-8 |
 | `policy` | Descarga y evalúa `robots.txt`, valida el alcance de cada URL y decide si una página puede visitarse. | RF-3 |
-| `discover` | Recorre enlaces, elimina duplicados por URL sin consulta ni fragmento, aplica alcance y modo de recorrido, conserva URLs relacionadas con HTTP 404 como fuentes no disponibles, omite respuestas relacionadas correctas no HTML y devuelve fuentes ordenadas. | RF-3, RF-8, RF-9 |
+| `discover` | Recorre enlaces, conserva su texto y contexto de navegación, puntúa candidatos admisibles, elimina duplicados por URL sin consulta ni fragmento, aplica alcance y modo de recorrido, conserva URLs relacionadas con HTTP 404 como fuentes no disponibles, omite respuestas relacionadas correctas no HTML y devuelve fuentes ordenadas. | RF-3, RF-8, RF-9, RF-10, RF-11 |
 | `extract` | Convierte HTML extraído en páginas documentales normalizadas con URL y contenido atribuible. | RF-3, RF-4 |
 | `render` | Genera de forma determinista los formatos de guía con referencias y contenido organizado a partir del modelo normalizado, con avisos atribuibles para fuentes no disponibles. | RF-4, RF-8 |
 | `metadata` | Serializa, valida y compara metadatos de gestión y la huella del contenido generado. | RF-4, RF-5, RF-6 |
@@ -76,7 +76,7 @@ function build_skill(configuration, previous_skill):
     queue = links discovered from source page
     visited = { canonicalize(source URL) }
     while queue is not empty and traversal may continue:
-        candidate = next URL in deterministic URL order
+    candidate = next candidate by descending priority and canonical URL
         canonical = remove query and fragment from candidate
         skip if canonical is visited
         mark canonical as visited
@@ -109,7 +109,7 @@ function build_skill(configuration, previous_skill):
     release lock and return the per-skill result
 ```
 
-El modo `limited` cuenta la página inicial dentro de `max_pages`; al alcanzar el límite no es un error y se publica lo ya extraído. Las fuentes relacionadas con HTTP 404 cuentan como fuentes no disponibles y no se expanden. Las respuestas relacionadas correctas no HTML se omiten y no aportan contenido. El modo `all` y la cola ordenada garantizan resultados repetibles para las mismas fuentes. Si una operación de lote llama a este algoritmo para varias skills, continúa tras cada fallo individual. **Cubre RF-3, RF-4, RF-6, RF-7, RF-8 y RF-9.**
+El modo `limited` cuenta la página inicial dentro de `max_pages`; al alcanzar el límite no es un error y se publica lo ya extraído. Las fuentes relacionadas con HTTP 404 cuentan como fuentes no disponibles y no se expanden. Las respuestas relacionadas correctas no HTML se omiten y no aportan contenido. La prioridad suma señales sin distinguir mayúsculas en ruta, ancla y navegación (`docs`, `guide`, `api`, `reference`, `components`) y resta las señales penalizadas (`blog`, `changelog`, `releases`, `supported-browsers`, `privacy`, `terms`, `careers`) y destinos de imagen, recurso estático o red social. Los empates se resuelven por URL canónica; las candidatas de sitemap conservan precedencia sobre enlaces HTML y la prioridad no altera alcance, límite de sitio, robots ni acceso. El modo `all` y esta cola ordenada garantizan resultados repetibles para las mismas fuentes. Si una operación de lote llama a este algoritmo para varias skills, continúa tras cada fallo individual. **Cubre RF-3, RF-4, RF-6, RF-7, RF-8, RF-9, RF-10 y RF-11.**
 
 ## Contrato de la CLI
 

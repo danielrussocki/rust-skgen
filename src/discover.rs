@@ -4,10 +4,10 @@ use std::collections::BTreeSet;
 
 use crate::{
     domain::{
-        AuthorizedHost, DiscoveryConfiguration, DiscoveryScope, DocumentationSource, SiteBoundary,
-        TraversalMode,
+        AuthorizedHost, DiscoveryConfiguration, DiscoveryScope, DocumentationSource, LinkCandidate,
+        SiteBoundary, TraversalMode,
     },
-    extract::{DocumentExtractionError, extract_document, extract_links},
+    extract::{DocumentExtractionError, extract_document, extract_link_candidates},
     fetch::{DocumentFetcher, FetchError},
     policy::{CrawlPolicy, RobotsError},
     sitemap::find_sitemap_urls,
@@ -17,6 +17,62 @@ use url::Url;
 
 /// Marks a component that discovers documentation pages.
 pub trait SiteDiscoverer {}
+
+const DOCUMENTATION_SIGNALS: [&str; 5] = ["docs", "guide", "api", "reference", "components"];
+const PENALIZED_SIGNALS: [&str; 7] = [
+    "blog",
+    "changelog",
+    "releases",
+    "supported-browsers",
+    "privacy",
+    "terms",
+    "careers",
+];
+const IMAGE_EXTENSIONS: [&str; 7] = [".avif", ".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp"];
+const STATIC_EXTENSIONS: [&str; 7] = [".css", ".js", ".map", ".pdf", ".woff", ".woff2", ".zip"];
+const SOCIAL_HOSTS: [&str; 6] = [
+    "facebook.com",
+    "instagram.com",
+    "linkedin.com",
+    "twitter.com",
+    "x.com",
+    "youtube.com",
+];
+
+/// Returns the deterministic score used to prioritize an admissible link candidate.
+pub fn candidate_priority(candidate: &LinkCandidate) -> i32 {
+    let text_score = [
+        candidate.url().path(),
+        candidate.anchor_text(),
+        candidate.navigation_text(),
+    ]
+    .into_iter()
+    .map(|text| {
+        let lowercase = text.to_ascii_lowercase();
+        DOCUMENTATION_SIGNALS
+            .iter()
+            .filter(|signal| lowercase.contains(**signal))
+            .count() as i32
+            - PENALIZED_SIGNALS
+                .iter()
+                .filter(|signal| lowercase.contains(**signal))
+                .count() as i32
+    })
+    .sum::<i32>();
+    let path = candidate.url().path().to_ascii_lowercase();
+    let resource_penalty = IMAGE_EXTENSIONS
+        .iter()
+        .chain(STATIC_EXTENSIONS.iter())
+        .any(|extension| path.ends_with(extension)) as i32;
+    let social_penalty = candidate.url().host_str().is_some_and(|host| {
+        let host = host.to_ascii_lowercase();
+        SOCIAL_HOSTS
+            .iter()
+            .any(|social_host| host == *social_host || host.ends_with(&format!(".{social_host}")))
+    }) as i32;
+
+    text_score - resource_penalty - social_penalty
+}
 
 enum FetchOutcome {
     Document(crate::fetch::FetchedDocument),
@@ -111,20 +167,20 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
     let mut visited = BTreeSet::from([source_canonical]);
     let mut sitemap_queue = find_sitemap_urls(&source_url, fetcher)
         .into_iter()
-        .collect::<BTreeSet<_>>();
+        .map(|url| LinkCandidate::new(url, String::new(), false))
+        .collect::<Vec<_>>();
     let mut link_queue = source_links(&source_url, source_document.body(), configuration.scope());
     let mut pages = vec![DocumentationSource::Extracted(source_page)];
 
-    while let Some((candidate, from_sitemap)) = sitemap_queue
-        .pop_first()
+    while let Some((candidate, from_sitemap)) = next_candidate(&mut sitemap_queue)
         .map(|candidate| (candidate, true))
-        .or_else(|| link_queue.pop_first().map(|candidate| (candidate, false)))
+        .or_else(|| next_candidate(&mut link_queue).map(|candidate| (candidate, false)))
     {
         if maximum_reached(configuration, pages.len()) {
             break;
         }
 
-        let candidate = normalize_visit_url(&candidate);
+        let candidate = candidate.url().clone();
         if !visited.insert(candidate.clone())
             || !is_in_scope(&source_url, &candidate, configuration, &navigation_urls)
         {
@@ -152,11 +208,7 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
         if configuration.traversal_mode() != TraversalMode::OneLevel
             && !maximum_reached(configuration, pages.len())
         {
-            link_queue.extend(
-                extract_links(&candidate, document.body())
-                    .into_iter()
-                    .map(|url| normalize_visit_url(&url)),
-            );
+            link_queue.extend(extract_link_candidates(&candidate, document.body()));
         }
     }
 
@@ -215,14 +267,23 @@ fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
     Ok(FetchOutcome::Document(document))
 }
 
-fn source_links(source_url: &Url, html: &str, scope: DiscoveryScope) -> BTreeSet<Url> {
+fn next_candidate(queue: &mut Vec<LinkCandidate>) -> Option<LinkCandidate> {
+    queue.sort_by(|left, right| {
+        candidate_priority(right)
+            .cmp(&candidate_priority(left))
+            .then_with(|| left.url().cmp(right.url()))
+    });
+    (!queue.is_empty()).then(|| queue.remove(0))
+}
+
+fn source_links(source_url: &Url, html: &str, scope: DiscoveryScope) -> Vec<LinkCandidate> {
     match scope {
-        DiscoveryScope::DocumentationNavigation => navigation_urls(source_url, html),
+        DiscoveryScope::DocumentationNavigation => extract_link_candidates(source_url, html)
+            .into_iter()
+            .filter(|candidate| candidate.is_navigation())
+            .collect(),
         DiscoveryScope::SameSite | DiscoveryScope::PathPrefix | DiscoveryScope::ParentDirectory => {
-            extract_links(source_url, html)
-                .into_iter()
-                .map(|url| normalize_visit_url(&url))
-                .collect()
+            extract_link_candidates(source_url, html)
         }
     }
 }
@@ -575,6 +636,82 @@ mod tests {
         assert_eq!(
             fetcher.fetched_urls.into_inner(),
             vec![url("/start"), url("/a"), url("/b"), url("/z")]
+        );
+    }
+
+    #[test]
+    fn prioritizes_html_candidates_before_fetching_and_breaks_ties_by_canonical_url() {
+        let source_url = url("/start");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            source_url.clone(),
+            format!(
+                "{}<a href=\"/blog\">Blog</a><a href=\"/guide\">Guide</a><a href=\"/b\">B</a><a href=\"/a\">A</a>",
+                document("Start")
+            ),
+        );
+        for path in ["/a", "/b", "/blog", "/guide"] {
+            documents.insert(url(path), document(path));
+        }
+        let fetcher = GraphFetcher::new(documents);
+
+        discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("the local documentation graph should be discovered");
+
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![
+                source_url,
+                url("/guide"),
+                url("/a"),
+                url("/b"),
+                url("/blog"),
+            ]
+        );
+    }
+
+    #[test]
+    fn limited_traversal_uses_priority_for_mixed_signals_without_relaxing_scope() {
+        let source_url = url("/start");
+        let guide_url = url("/guide");
+        let mixed_url = url("/docs-blog");
+        let outside_url =
+            Url::parse("https://outside.example.com/docs").expect("test URL must be valid");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            source_url.clone(),
+            format!(
+                "{}<a href=\"/blog\">Blog</a><a href=\"/docs-blog\">Docs blog</a><a href=\"/guide\">Guide</a><a href=\"{outside_url}\">Docs</a>",
+                document("Start")
+            ),
+        );
+        documents.insert(guide_url.clone(), document("Guide"));
+        documents.insert(mixed_url.clone(), document("Mixed"));
+        let fetcher = GraphFetcher::new(documents);
+
+        let pages = discover_all(
+            source_url.clone(),
+            &configuration(TraversalMode::Limited, Some(3)),
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("priority should determine the limited traversal order");
+
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.source_url().clone())
+                .collect::<Vec<_>>(),
+            vec![mixed_url.clone(), guide_url.clone(), source_url.clone()]
+        );
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![source_url, guide_url, mixed_url]
         );
     }
 

@@ -57,11 +57,27 @@ fn traceability_covers_related_non_html_responses() {
 
 #[test]
 fn traceability_lists_deterministic_coverage_for_every_functional_requirement() {
-    for requirement in 1..=10 {
+    for requirement in 1..=11 {
         let clause = format!("RF-{requirement}:");
         assert!(
             TRACEABILITY.contains(&clause),
             "missing traceability coverage for {clause}"
+        );
+    }
+}
+
+#[test]
+fn traceability_covers_deterministic_link_prioritization() {
+    for reference in [
+        "tests/link_candidate.rs::scores_documentation_signals_case_insensitively_from_each_context",
+        "tests/link_candidate.rs::penalizes_terms_and_resource_destinations_without_rejecting_candidates",
+        "src/discover.rs::tests::prioritizes_html_candidates_before_fetching_and_breaks_ties_by_canonical_url",
+        "tests/sitemap_discovery.rs::prioritizes_sitemap_candidates_before_html_candidates",
+        "src/discover.rs::tests::limited_traversal_uses_priority_for_mixed_signals_without_relaxing_scope",
+    ] {
+        assert!(
+            TRACEABILITY.contains(reference),
+            "missing traceability reference: {reference}"
         );
     }
 }
