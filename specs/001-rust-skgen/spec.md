@@ -126,6 +126,18 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Cuando la CLI descubra enlaces admisibles y un enlace contenga una señal penalizada, deberá asignarle una prioridad menor sin omitirlo únicamente por esa señal.
 - Cuando la CLI encuentre una URL fuera del alcance, prohibida por `robots.txt` o no admisible por las condiciones de acceso, no deberá extraerla aunque sus señales le asignen una prioridad alta.
 
+### RF-12. Tratamiento de redirecciones en URLs relacionadas
+
+- Si la URL inicial responde con una redirección, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
+- Cuando una URL de documentación relacionada responda con una redirección, la CLI deberá omitir esa URL, no deberá seguir la redirección ni incluir su contenido en la skill, y deberá continuar el descubrimiento y la generación con las demás URLs disponibles.
+- Si, tras omitir URLs relacionadas redirigidas, no queda ninguna página de documentación válida para incluir, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
+
+### Escenarios EARS de RF-12
+
+- Cuando la URL inicial responda con una redirección, la CLI deberá informar el fallo de la skill sin crearla ni actualizarla parcialmente.
+- Cuando una URL relacionada responda con una redirección y existan otras URLs relacionadas extraíbles, la CLI deberá omitir la URL redirigida y generar la skill con las demás páginas válidas.
+- Cuando todas las páginas relacionadas disponibles respondan con una redirección y no exista ninguna página de documentación válida, la CLI deberá fallar la operación sin crear ni actualizar parcialmente la skill.
+
 ## Requisitos no funcionales
 
 - La CLI deberá respetar las reglas aplicables de todo archivo `robots.txt` válido que encuentre, los términos de uso aplicables y los límites de acceso de cada sitio; salvo configuración expresa, la ausencia de `robots.txt` no impedirá el descubrimiento.
@@ -151,7 +163,8 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 
 - La URL base redirige, no responde, responde con cualquier error HTTP, está prohibida por las condiciones de acceso aplicables o devuelve contenido HTML no apto para extraer documentación: la operación falla sin cambios parciales.
 - Una URL de documentación relacionada responde con HTTP 404: la generación continúa e incluye una mención de ausencia de documentación para esa URL con la recomendación de buscar en internet o en el código fuente correspondiente.
-- Una URL de documentación relacionada redirige, no responde, responde con un error distinto de HTTP 404, está prohibida por las condiciones de acceso aplicables o devuelve contenido HTML no apto para extraer documentación: la operación falla sin cambios parciales.
+- Una URL de documentación relacionada redirige: la CLI la omite, no sigue la redirección y continúa con las demás URLs disponibles; si no queda ninguna página de documentación válida, la operación falla sin cambios parciales.
+- Una URL de documentación relacionada no responde, responde con un error distinto de HTTP 404, está prohibida por las condiciones de acceso aplicables o devuelve contenido HTML no apto para extraer documentación: la operación falla sin cambios parciales.
 - La URL inicial o una URL de documentación relacionada responde correctamente con contenido no HTML, como una imagen, un PDF, una hoja de estilo, un script o un archivo descargable: la CLI omite esa URL y continúa con las demás URLs disponibles; si no queda ninguna página de documentación válida, la operación falla sin cambios parciales.
 - El sitio no publica `robots.txt`, publica un archivo no válido o este no puede obtenerse: el descubrimiento continúa si no se exige su existencia y falla sin cambios parciales si se exige.
 - Un archivo `robots.txt` válido prohíbe acceder a la URL inicial o a una página relacionada, tanto si se exige su existencia como si no.
@@ -193,7 +206,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Las operaciones fallidas no alteran una skill existente ni dejan resultados parciales.
 - Una actualización de varias skills continúa tras un fallo y comunica el resultado individual de cada una.
 - La CLI identifica las skills gestionadas mediante metadatos validables y solicita confirmación antes de reconstruirlos.
-- La CLI rechaza redirecciones, URLs fuera del alcance y accesos prohibidos sin generar o actualizar parcialmente la skill afectada.
+- La CLI rechaza redirecciones de la URL inicial sin generar o actualizar parcialmente la skill afectada, y omite sin seguir las redirecciones de URLs relacionadas mientras continúa con las demás URLs disponibles.
 - La CLI consulta las ubicaciones convencionales de sitemap antes del recorrido de enlaces HTML, usa las URLs canónicas admisibles que encuentre y continúa normalmente cuando no hay un sitemap utilizable.
 - La CLI prioriza de forma determinista las URLs admisibles para extraer primero las más indicativas de documentación, sin alterar las reglas de alcance, sitemap, `robots.txt`, acceso o seguridad.
 - Los requisitos funcionales y los casos límite cuentan con pruebas deterministas actualizadas.
