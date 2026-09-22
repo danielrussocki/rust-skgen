@@ -2,7 +2,7 @@
 
 ## Alcance y trazabilidad
 
-Este plan implementa exclusivamente la especificación 001. La creación, protección frente a sobrescritura, descubrimiento, contenido, actualización, resultado y gestión de URLs no encontradas se cubren respectivamente en RF-1, RF-2, RF-3, RF-4, RF-5, RF-6, RF-7 y RF-8.
+Este plan implementa exclusivamente la especificación 001. La creación, protección frente a sobrescritura, descubrimiento, contenido, actualización, resultado, gestión de URLs no encontradas y omisión de recursos no HTML se cubren respectivamente en RF-1, RF-2, RF-3, RF-4, RF-5, RF-6, RF-7, RF-8 y RF-9.
 
 ## Estructura de módulos
 
@@ -12,7 +12,7 @@ Este plan implementa exclusivamente la especificación 001. La creación, protec
 | `domain` | Define los tipos validados: nombre de skill, URL de origen, configuración de descubrimiento, formato, metadatos, fuentes documentales extraídas o no disponibles, skill normalizada y resultados. | RF-1, RF-3, RF-4, RF-6, RF-8 |
 | `fetch` | Obtiene recursos HTTP(S), sin seguir redirecciones, aplica `User-Agent`, tiempos de espera, reintentos acotados y concurrencia máxima de una solicitud. | RF-1, RF-3, RF-8 |
 | `policy` | Descarga y evalúa `robots.txt`, valida el alcance de cada URL y decide si una página puede visitarse. | RF-3 |
-| `discover` | Recorre enlaces, elimina duplicados por URL sin consulta ni fragmento, aplica alcance y modo de recorrido, conserva URLs relacionadas con HTTP 404 como fuentes no disponibles y devuelve fuentes ordenadas. | RF-3, RF-8 |
+| `discover` | Recorre enlaces, elimina duplicados por URL sin consulta ni fragmento, aplica alcance y modo de recorrido, conserva URLs relacionadas con HTTP 404 como fuentes no disponibles, omite respuestas relacionadas correctas no HTML y devuelve fuentes ordenadas. | RF-3, RF-8, RF-9 |
 | `extract` | Convierte HTML extraído en páginas documentales normalizadas con URL y contenido atribuible. | RF-3, RF-4 |
 | `render` | Genera de forma determinista los formatos de guía con referencias y contenido organizado a partir del modelo normalizado, con avisos atribuibles para fuentes no disponibles. | RF-4, RF-8 |
 | `metadata` | Serializa, valida y compara metadatos de gestión y la huella del contenido generado. | RF-4, RF-5, RF-6 |
@@ -56,7 +56,7 @@ La huella se calcula sobre el contenido gestionado renderizado de forma determin
 
 ## Algoritmo de lectura del sitio
 
-**Cubre RF-1, RF-2, RF-3, RF-4, RF-7 y RF-8.**
+**Cubre RF-1, RF-2, RF-3, RF-4, RF-7, RF-8 y RF-9.**
 
 ```text
 function build_skill(configuration, previous_skill):
@@ -88,7 +88,9 @@ function build_skill(configuration, previous_skill):
         if candidate returns HTTP 404:
             add an unavailable source with its canonical URL
             continue without extracting or enqueueing links
-        fail this skill if the candidate has another HTTP error or is non-documental
+        fail this skill if the candidate has another HTTP error
+        if the candidate returns a successful non-HTML response:
+            skip it and continue with the remaining candidates
         extract its document content; fail this skill if it is not documental
         add page to pending set
         if traversal is all: enqueue its links
@@ -107,11 +109,11 @@ function build_skill(configuration, previous_skill):
     release lock and return the per-skill result
 ```
 
-El modo `limited` cuenta la página inicial dentro de `max_pages`; al alcanzar el límite no es un error y se publica lo ya extraído. Las fuentes relacionadas con HTTP 404 cuentan como fuentes no disponibles y no se expanden. El modo `all` y la cola ordenada garantizan resultados repetibles para las mismas fuentes. Si una operación de lote llama a este algoritmo para varias skills, continúa tras cada fallo individual. **Cubre RF-3, RF-4, RF-6, RF-7 y RF-8.**
+El modo `limited` cuenta la página inicial dentro de `max_pages`; al alcanzar el límite no es un error y se publica lo ya extraído. Las fuentes relacionadas con HTTP 404 cuentan como fuentes no disponibles y no se expanden. Las respuestas relacionadas correctas no HTML se omiten y no aportan contenido. El modo `all` y la cola ordenada garantizan resultados repetibles para las mismas fuentes. Si una operación de lote llama a este algoritmo para varias skills, continúa tras cada fallo individual. **Cubre RF-3, RF-4, RF-6, RF-7, RF-8 y RF-9.**
 
 ## Contrato de la CLI
 
-Los nombres de comandos y los mensajes visibles se escriben en inglés. **Cubre RF-1, RF-3, RF-5, RF-6, RF-7 y RF-8.**
+Los nombres de comandos y los mensajes visibles se escriben en inglés. **Cubre RF-1, RF-3, RF-5, RF-6, RF-7, RF-8 y RF-9.**
 
 ```text
 rust-skgen create <source-url> <skill-name>
@@ -146,6 +148,7 @@ rust-skgen update [<skill-name>...]
 - Si faltan metadatos, son inválidos o no coinciden con la huella de contenido, la CLI pregunta `Rebuild metadata and update this skill? [y/N]`. La ausencia de respuesta o una respuesta negativa conserva la skill sin cambios.
 - Una modificación manual no bloquea la actualización si los metadatos y la huella son válidos; el contenido generado se reemplaza.
 - Un error de red o HTTP en la URL de origen falla la skill. Una URL relacionada con HTTP 404 se publica como fuente no disponible con su URL y una recomendación de buscar información en internet o en el código fuente; cualquier otro error HTTP relacionado falla la skill.
+- Una respuesta correcta no HTML de una URL relacionada se omite y el descubrimiento continúa con las demás URLs. Una respuesta no HTML de la URL de origen falla si no existe ninguna página documental válida que incluir.
 
 Salidas de éxito, en salida estándar:
 
@@ -185,17 +188,17 @@ Las dependencias propuestas quedan justificadas por los requisitos de HTTP(S), p
 
 ## Estrategia de tests
 
-Todos los nombres de tests y sus mensajes estarán en inglés; los datos de prueba serán locales y deterministas. **Cubre RF-1 a RF-8 y los requisitos no funcionales.**
+Todos los nombres de tests y sus mensajes estarán en inglés; los datos de prueba serán locales y deterministas. **Cubre RF-1 a RF-9 y los requisitos no funcionales.**
 
 | Nivel | Casos | RF cubiertos |
 | --- | --- | --- |
 | Unidad de dominio | Slugs válidos e inválidos, esquemas HTTP(S), valores predeterminados, combinaciones de opciones y máximo de páginas. | RF-1, RF-3, RF-6 |
 | Unidad de alcance | Host y puerto exactos, mismo origen, dominio base con autorización y enlace, prefijo, directorio padre, navegación y URLs equivalentes. | RF-3 |
 | Unidad de renderizado y metadatos | Orden estable, ambos formatos, atribución, avisos de fuentes no disponibles, contenido derivado de fuentes, serialización, validación y discrepancia de huella. | RF-4, RF-6, RF-8 |
-| Integración de red local | Respuestas HTTP correctas, redirecciones, errores HTTP de URL inicial o relacionada, HTTP 404 relacionado, HTML no documental, límites de tiempo, reintentos, `robots.txt` permitido y prohibido, y ausencia, inaccesibilidad o contenido inválido con exigencia opcional u obligatoria. | RF-1, RF-3, RF-8 |
+| Integración de red local | Respuestas HTTP correctas, redirecciones, errores HTTP de URL inicial o relacionada, HTTP 404 relacionado, respuestas relacionadas no HTML, HTML no documental, límites de tiempo, reintentos, `robots.txt` permitido y prohibido, y ausencia, inaccesibilidad o contenido inválido con exigencia opcional u obligatoria. | RF-1, RF-3, RF-8, RF-9 |
 | Integración de almacenamiento temporal | Creación, conflicto de nombre, escritura fallida, reemplazo, renombrado, restauración y bloqueo simultáneo. | RF-1, RF-2, RF-5, RF-6 |
-| Integración de servicio | Actualización sin argumentos, selección válida y mixta, lotes que continúan tras fallo, rechazo de cambios masivos, reconstrucción aceptada o rechazada y publicación de fuentes relacionadas no disponibles. | RF-5, RF-6, RF-7, RF-8 |
-| Pruebas de CLI | Argumentos, exigencia de `robots.txt`, URLs relacionadas no encontradas, mensajes en inglés, confirmación interactiva, salida estándar, salida de error y códigos `0`, `1` y `2`. | RF-1, RF-3, RF-5, RF-6, RF-7, RF-8 |
-| Regresión | Una prueba determinista por corrección de error público. | RF-1 a RF-8 |
+| Integración de servicio | Actualización sin argumentos, selección válida y mixta, lotes que continúan tras fallo, rechazo de cambios masivos, reconstrucción aceptada o rechazada, publicación de fuentes relacionadas no disponibles y omisión de recursos relacionados no HTML. | RF-5, RF-6, RF-7, RF-8, RF-9 |
+| Pruebas de CLI | Argumentos, exigencia de `robots.txt`, URLs relacionadas no encontradas, recursos relacionados no HTML, mensajes en inglés, confirmación interactiva, salida estándar, salida de error y códigos `0`, `1` y `2`. | RF-1, RF-3, RF-5, RF-6, RF-7, RF-8, RF-9 |
+| Regresión | Una prueba determinista por corrección de error público. | RF-1 a RF-9 |
 
 La validación final ejecutará `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` cuando el proyecto sea compilable.

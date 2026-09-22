@@ -111,6 +111,8 @@ Discovery attempts to evaluate `robots.txt` before requesting each documentation
 - A related URL that returns HTTP 404 does not abort discovery. The generated skill identifies
   that URL as unavailable and recommends searching the internet or the corresponding source
   code for current documentation.
+- A related URL with a successful non-HTML response, such as JSON, a PDF, an image, or a
+  stylesheet, is omitted. Discovery continues with the remaining HTML documentation URLs.
 - Redirects and any related HTTP error other than 404 fail the affected skill without replacing
   its previous version.
 
