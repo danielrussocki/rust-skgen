@@ -2,7 +2,9 @@
 
 `rust-skgen` creates and refreshes AI-agent skills from public documentation.
 It retrieves HTML documentation, follows links within a configured scope, and writes a
-deterministic skill with attributed source URLs and metadata for later updates.
+deterministic skill with attributed source URLs and metadata for later updates. A related
+documentation URL that returns HTTP 404 is retained as an unavailable-source notice instead of
+preventing the skill from being generated.
 
 ## Requirements
 
@@ -101,6 +103,16 @@ Discovery attempts to evaluate `robots.txt` before requesting each documentation
   retrieved or validated, the operation fails without creating or changing a partial skill.
 - The selected setting is stored in `metadata.json` and reused by later updates. It can be
   changed for exactly one skill with `update --require-robots-txt true|false`.
+
+### HTTP response handling
+
+- The source URL must return extractable HTML. Any network or HTTP error, including 404, fails
+  the create or update operation without publishing a partial skill.
+- A related URL that returns HTTP 404 does not abort discovery. The generated skill identifies
+  that URL as unavailable and recommends searching the internet or the corresponding source
+  code for current documentation.
+- Redirects and any related HTTP error other than 404 fail the affected skill without replacing
+  its previous version.
 
 Examples:
 
