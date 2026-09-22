@@ -291,3 +291,39 @@ Hecho cuando: `docs/traceability.md` referencia pruebas deterministas para valor
 - [x] T73. Ejecutar las verificaciones finales y comprobar la trazabilidad de los requisitos y casos límite modificados.
 RF: RF-1 a RF-7.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y cada cláusula nueva de RF-3, RF-4 y RF-6 tiene una prueba identificable.
+
+- [x] T74. Añadir una prueba de regresión para una actualización sin cambios que conserva y aplica la exigencia persistida de `robots.txt`.
+RF: RF-3, RF-5, RF-6.
+Hecho cuando: Un test de integración crea una skill que exige `robots.txt`, elimina o invalida ese archivo antes de `update` sin argumentos de configuración y verifica que la actualización falla sin modificar la skill previa.
+
+- [x] T75. Aplicar en el ejecutable la exigencia de `robots.txt` recuperada de los metadatos cuando una actualización no recibe una configuración nueva.
+RF: RF-3, RF-5, RF-6.
+Hecho cuando: La prueba de T74 pasa y una actualización sin cambios de una skill que no exige `robots.txt` continúa aceptando su ausencia.
+
+- [x] T76. Definir en el modelo normalizado la representación de una URL relacionada cuya documentación no está disponible por HTTP 404.
+RF: RF-4, RF-8.
+Hecho cuando: Tests unitarios construyen y validan una fuente no disponible con su URL canónica y sin contenido documental extraído.
+
+- [x] T77. Añadir pruebas de descubrimiento para diferenciar el error de la URL base del HTTP 404 de una URL relacionada.
+RF: RF-2, RF-3, RF-8.
+Hecho cuando: Tests locales verifican que un error HTTP o de red de la URL base falla sin devolver páginas parciales, que un 404 relacionado permite completar el descubrimiento y que cualquier otro error relacionado lo aborta sin resultados parciales.
+
+- [x] T78. Implementar en el descubrimiento el tratamiento recuperable de HTTP 404 exclusivamente para URLs de documentación relacionadas.
+RF: RF-2, RF-3, RF-8.
+Hecho cuando: Pasan las pruebas de T77 y la URL base conserva el comportamiento de fallo atómico para cualquier error HTTP o de red.
+
+- [x] T79. Renderizar la mención de ausencia de documentación para cada URL relacionada con HTTP 404.
+RF: RF-4, RF-8.
+Hecho cuando: Tests de renderizado verifican que la skill nombra la URL no disponible, indica que no hay documentación y recomienda buscar en internet o en el código fuente, sin presentarlo como contenido extraído.
+
+- [x] T80. Añadir pruebas de servicio e integración para la creación y actualización con URLs relacionadas que responden HTTP 404.
+RF: RF-2, RF-4, RF-7, RF-8.
+Hecho cuando: Un servidor local demuestra que `create` y `update` publican una skill completa con la mención requerida tras un 404 relacionado, mientras que un error de URL base o un error relacionado distinto de 404 no publica ni modifica parcialmente y comunica el resultado correspondiente.
+
+- [x] T81. Actualizar la matriz de trazabilidad para RF-8 y el caso de actualización que reutiliza la exigencia persistida de `robots.txt`.
+RF: RF-3, RF-8.
+Hecho cuando: `docs/traceability.md` referencia las pruebas de T74, T77, T79 y T80 para cada cláusula y caso límite nuevo aplicable.
+
+- [x] T82. Ejecutar las verificaciones finales y revisar los criterios de finalización de la especificación.
+RF: RF-1 a RF-8.
+Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y cada criterio de finalización y caso límite tiene una prueba determinista identificable.

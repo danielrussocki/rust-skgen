@@ -187,6 +187,53 @@ impl DocumentationPage {
 
 impl SkillModel for DocumentationPage {}
 
+/// A normalized documentation source, whether its content was extracted or is unavailable.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DocumentationSource {
+    /// Documentation successfully extracted from the source URL.
+    Extracted(DocumentationPage),
+    /// A related URL that returned HTTP 404 and has no extractable documentation.
+    Unavailable(Url),
+}
+
+impl DocumentationSource {
+    /// Creates a source representing related documentation unavailable at its canonical URL.
+    pub fn unavailable(mut source_url: Url) -> Self {
+        source_url.set_query(None);
+        source_url.set_fragment(None);
+        Self::Unavailable(source_url)
+    }
+
+    /// Returns the attributable source URL.
+    pub fn source_url(&self) -> &Url {
+        match self {
+            Self::Extracted(page) => page.source_url(),
+            Self::Unavailable(source_url) => source_url,
+        }
+    }
+
+    /// Returns extracted content, when the source documentation is available.
+    pub fn content(&self) -> Option<&str> {
+        match self {
+            Self::Extracted(page) => Some(page.content()),
+            Self::Unavailable(_) => None,
+        }
+    }
+
+    /// Returns whether the source documentation was unavailable.
+    pub fn is_unavailable(&self) -> bool {
+        matches!(self, Self::Unavailable(_))
+    }
+}
+
+impl SkillModel for DocumentationSource {}
+
+impl From<DocumentationPage> for DocumentationSource {
+    fn from(page: DocumentationPage) -> Self {
+        Self::Extracted(page)
+    }
+}
+
 /// Determines which related documentation URLs may be discovered.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum DiscoveryScope {

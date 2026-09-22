@@ -52,6 +52,16 @@ struct LocalDocumentationFetcher {
     documents: BTreeMap<Url, String>,
 }
 
+struct StatusDocumentationFetcher {
+    documents: BTreeMap<Url, FetchedDocument>,
+}
+
+impl DocumentFetcher for StatusDocumentationFetcher {
+    fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
+        Ok(self.documents[&url].clone())
+    }
+}
+
 struct NonHtmlDocumentationFetcher;
 
 impl DocumentFetcher for NonHtmlDocumentationFetcher {
@@ -103,6 +113,49 @@ fn metadata_for_content(source: &str, content: &str) -> ManagedSkillMetadata {
     let source_url = SourceUrl::parse(source).unwrap();
     let discovery = DiscoveryConfiguration::default();
     ManagedSkillMetadata::new(source_url, discovery, content_digest(content))
+}
+
+#[test]
+fn updating_a_skill_publishes_an_unavailable_related_page_notice_after_not_found() {
+    let skills = TemporarySkillsDirectory::new();
+    let name = SkillName::parse("missing-related-docs").unwrap();
+    let source_url = Url::parse("https://docs.example.test/start").unwrap();
+    let missing_url = Url::parse("https://docs.example.test/missing").unwrap();
+    let creator = TransactionalSkillCreator::new(skills.path());
+    creator
+        .create(&name, "# Previous skill\n", &initial_metadata())
+        .unwrap();
+    let fetcher = StatusDocumentationFetcher {
+        documents: BTreeMap::from([
+            (
+                source_url.clone(),
+                FetchedDocument::new(
+                    source_url.clone(),
+                    200,
+                    "<main><p>Updated documentation.</p><a href=\"/missing\">Missing</a></main>"
+                        .to_owned(),
+                ),
+            ),
+            (
+                missing_url.clone(),
+                FetchedDocument::new(missing_url.clone(), 404, "missing".to_owned()),
+            ),
+        ]),
+    };
+
+    update_skill(
+        UpdateSkillRequest::new(name.clone()),
+        &fetcher,
+        &AllowAllPolicy,
+        &creator,
+    )
+    .expect("a related HTTP 404 should not prevent an update");
+
+    let content =
+        fs::read_to_string(skills.path().join(name.as_str()).join(SKILL_FILE_NAME)).unwrap();
+    assert!(content.contains("Updated documentation."));
+    assert!(content.contains(&missing_url.to_string()));
+    assert!(content.contains("Documentation is unavailable for this source."));
 }
 
 #[test]

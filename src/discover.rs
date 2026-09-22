@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     domain::{
-        AuthorizedHost, DiscoveryConfiguration, DiscoveryScope, DocumentationPage, SiteBoundary,
+        AuthorizedHost, DiscoveryConfiguration, DiscoveryScope, DocumentationSource, SiteBoundary,
         TraversalMode,
     },
     extract::{DocumentExtractionError, extract_document, extract_links},
@@ -82,15 +82,19 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
     configuration: &DiscoveryConfiguration,
     fetcher: &F,
     policy: &P,
-) -> Result<Vec<DocumentationPage>, DiscoveryError> {
+) -> Result<Vec<DocumentationSource>, DiscoveryError> {
     let source_canonical = normalize_visit_url(&source_url);
-    let source_document = fetch_document(source_url.clone(), fetcher, policy)?;
+    let source_document = fetch_document(source_url.clone(), true, configuration, fetcher, policy)?
+        .ok_or_else(|| DiscoveryError::UnexpectedStatus {
+            url: source_url.clone(),
+            status: 404,
+        })?;
     let source_page = extract_document(source_url.clone(), source_document.body())
         .map_err(DiscoveryError::Extraction)?;
     let navigation_urls = navigation_urls(&source_url, source_document.body());
     let mut visited = BTreeSet::from([source_canonical]);
     let mut queue = source_links(&source_url, source_document.body(), configuration.scope());
-    let mut pages = vec![source_page];
+    let mut pages = vec![DocumentationSource::Extracted(source_page)];
 
     while let Some(candidate) = queue.pop_first() {
         if maximum_reached(configuration, pages.len()) {
@@ -104,10 +108,15 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
             continue;
         }
 
-        let document = fetch_document(candidate.clone(), fetcher, policy)?;
+        let Some(document) =
+            fetch_document(candidate.clone(), false, configuration, fetcher, policy)?
+        else {
+            pages.push(DocumentationSource::unavailable(candidate));
+            continue;
+        };
         let page = extract_document(candidate.clone(), document.body())
             .map_err(DiscoveryError::Extraction)?;
-        pages.push(page);
+        pages.push(DocumentationSource::Extracted(page));
         if configuration.traversal_mode() != TraversalMode::OneLevel
             && !maximum_reached(configuration, pages.len())
         {
@@ -132,16 +141,24 @@ fn maximum_reached(configuration: &DiscoveryConfiguration, page_count: usize) ->
 
 fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
     url: Url,
+    is_source: bool,
+    configuration: &DiscoveryConfiguration,
     fetcher: &F,
     policy: &P,
-) -> Result<crate::fetch::FetchedDocument, DiscoveryError> {
-    if !policy.allows(&url).map_err(DiscoveryError::Policy)? {
+) -> Result<Option<crate::fetch::FetchedDocument>, DiscoveryError> {
+    if !policy
+        .allows_with_robots_requirement(&url, configuration.requires_robots_txt())
+        .map_err(DiscoveryError::Policy)?
+    {
         return Err(DiscoveryError::Forbidden(url));
     }
 
     let document = fetcher.fetch(url.clone()).map_err(DiscoveryError::Fetch)?;
     if (300..400).contains(&document.status()) {
         return Err(DiscoveryError::Redirect(url));
+    }
+    if document.status() == 404 && !is_source {
+        return Ok(None);
     }
     if !(200..300).contains(&document.status()) {
         return Err(DiscoveryError::UnexpectedStatus {
@@ -156,7 +173,7 @@ fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
         });
     }
 
-    Ok(document)
+    Ok(Some(document))
 }
 
 fn source_links(source_url: &Url, html: &str, scope: DiscoveryScope) -> BTreeSet<Url> {
@@ -330,7 +347,10 @@ mod tests {
 
     use super::{DiscoveryError, discover_all};
     use crate::{
-        domain::{ContentFormat, DiscoveryConfiguration, DiscoveryScope, TraversalMode},
+        domain::{
+            ContentFormat, DiscoveryConfiguration, DiscoveryScope, DocumentationPage,
+            DocumentationSource, TraversalMode,
+        },
         extract::DocumentExtractionError,
         fetch::{DocumentFetcher, FetchError, FetchedDocument},
         policy::{CrawlPolicy, RobotsError},
@@ -340,6 +360,18 @@ mod tests {
     struct GraphFetcher {
         documents: BTreeMap<Url, String>,
         fetched_urls: RefCell<Vec<Url>>,
+    }
+
+    struct StatusFetcher {
+        documents: BTreeMap<Url, FetchedDocument>,
+        fetched_urls: RefCell<Vec<Url>>,
+    }
+
+    impl DocumentFetcher for StatusFetcher {
+        fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
+            self.fetched_urls.borrow_mut().push(url.clone());
+            Ok(self.documents[&url].clone())
+        }
     }
 
     impl GraphFetcher {
@@ -766,5 +798,115 @@ mod tests {
             ))
         ));
         assert_eq!(fetcher.fetched_urls.into_inner(), vec![source_url]);
+    }
+
+    #[test]
+    fn source_http_error_aborts_discovery_before_any_related_url_is_visited() {
+        let source_url = url("/start");
+        let fetcher = StatusFetcher {
+            documents: BTreeMap::from([(
+                source_url.clone(),
+                FetchedDocument::new(source_url.clone(), 500, "unavailable".to_owned()),
+            )]),
+            fetched_urls: RefCell::new(Vec::new()),
+        };
+
+        let result = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        );
+
+        assert!(matches!(
+            result,
+            Err(DiscoveryError::UnexpectedStatus { url, status: 500 }) if url == source_url
+        ));
+        assert_eq!(fetcher.fetched_urls.into_inner(), vec![source_url]);
+    }
+
+    #[test]
+    fn related_http_not_found_is_retained_as_an_unavailable_source() {
+        let source_url = url("/start");
+        let missing_url = url("/missing");
+        let fetcher = StatusFetcher {
+            documents: BTreeMap::from([
+                (
+                    source_url.clone(),
+                    FetchedDocument::new(
+                        source_url.clone(),
+                        200,
+                        format!("{}<a href=\"/missing\">Missing</a>", document("Start")),
+                    ),
+                ),
+                (
+                    missing_url.clone(),
+                    FetchedDocument::new(missing_url.clone(), 404, "missing".to_owned()),
+                ),
+            ]),
+            fetched_urls: RefCell::new(Vec::new()),
+        };
+
+        let pages = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("a related HTTP 404 should not abort discovery");
+
+        assert_eq!(
+            pages,
+            vec![
+                DocumentationSource::unavailable(missing_url.clone()),
+                DocumentationSource::Extracted(DocumentationPage::new(
+                    source_url.clone(),
+                    "Start".to_owned(),
+                )),
+            ]
+        );
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![source_url, missing_url]
+        );
+    }
+
+    #[test]
+    fn related_http_error_other_than_not_found_aborts_without_results() {
+        let source_url = url("/start");
+        let failing_url = url("/failing");
+        let fetcher = StatusFetcher {
+            documents: BTreeMap::from([
+                (
+                    source_url.clone(),
+                    FetchedDocument::new(
+                        source_url.clone(),
+                        200,
+                        format!("{}<a href=\"/failing\">Failing</a>", document("Start")),
+                    ),
+                ),
+                (
+                    failing_url.clone(),
+                    FetchedDocument::new(failing_url.clone(), 500, "unavailable".to_owned()),
+                ),
+            ]),
+            fetched_urls: RefCell::new(Vec::new()),
+        };
+
+        let result = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        );
+
+        assert!(matches!(
+            result,
+            Err(DiscoveryError::UnexpectedStatus { url, status: 500 }) if url == failing_url
+        ));
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![source_url, failing_url]
+        );
     }
 }

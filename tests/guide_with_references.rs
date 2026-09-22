@@ -1,4 +1,4 @@
-use rust_skgen::domain::DocumentationPage;
+use rust_skgen::domain::{DocumentationPage, DocumentationSource};
 use rust_skgen::render::render_guide_with_references;
 use url::Url;
 
@@ -66,4 +66,23 @@ fn derives_non_empty_objective_and_instructions_only_from_extracted_content() {
         "## Instructions\n\nThe widget provides accessible interactions.\n\nUse the widget with its documented options."
     ));
     assert!(!rendered.contains("Use this skill"));
+}
+
+#[test]
+fn renders_an_unavailable_related_source_without_presenting_it_as_extracted_content() {
+    let available = DocumentationSource::from(page(
+        "https://docs.example.com/overview",
+        "The widget provides accessible interactions.",
+    ));
+    let unavailable = DocumentationSource::unavailable(
+        Url::parse("https://docs.example.com/missing?version=1#overview")
+            .expect("test URL must be valid"),
+    );
+
+    let rendered = render_guide_with_references(&[available, unavailable]);
+
+    assert!(rendered.contains("https://docs.example.com/missing"));
+    assert!(rendered.contains("Documentation is unavailable for this source."));
+    assert!(rendered.contains("Search the internet or the source code for current documentation."));
+    assert!(!rendered.contains("### Source: https://docs.example.com/missing\n\nThe widget"));
 }

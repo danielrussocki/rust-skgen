@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     thread,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use rust_skgen::{
@@ -142,6 +142,91 @@ fn mixed_update_server() -> (String, thread::JoinHandle<()>) {
         }
     });
     (format!("http://{address}"), handle)
+}
+
+fn robots_required_then_missing_server() -> (String, thread::JoinHandle<Vec<String>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut requests = Vec::new();
+        while Instant::now() < deadline {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    stream.set_nonblocking(false).unwrap();
+                    let mut request = [0; 1024];
+                    let length = stream.read(&mut request).unwrap();
+                    let request = String::from_utf8_lossy(&request[..length]);
+                    let path = request.split_whitespace().nth(1).unwrap().to_owned();
+                    let (status, content_type, body) = match (requests.len(), path.as_str()) {
+                        (0, "/robots.txt") => ("200 OK", "text/plain", "User-agent: *\nAllow: /\n"),
+                        (1, "/start") => (
+                            "200 OK",
+                            "text/html",
+                            "<main><p>Initial documentation.</p></main>",
+                        ),
+                        (_, "/robots.txt") => ("404 Not Found", "text/plain", "missing"),
+                        (_, "/start") => (
+                            "200 OK",
+                            "text/html",
+                            "<main><p>Unexpected updated documentation.</p></main>",
+                        ),
+                        _ => ("404 Not Found", "text/plain", "missing"),
+                    };
+                    requests.push(path);
+                    write!(
+                        stream,
+                        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                    .unwrap();
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("test server failed to accept a request: {error}"),
+            }
+        }
+        requests
+    });
+    (format!("http://{address}/start"), handle)
+}
+
+fn related_not_found_server() -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let mut start_requests = 0;
+        for _ in 0..8 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 1024];
+            let length = stream.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..length]);
+            let (status, content_type, body) = if request.starts_with("GET /robots.txt ") {
+                ("200 OK", "text/plain", "User-agent: *\nAllow: /\n")
+            } else if request.starts_with("GET /missing ") {
+                ("404 Not Found", "text/html", "missing")
+            } else {
+                start_requests += 1;
+                let body = if start_requests == 1 {
+                    "<main><p>Initial documentation.</p><a href=\"/missing\">Missing</a></main>"
+                } else {
+                    "<main><p>Updated documentation.</p><a href=\"/missing\">Missing</a></main>"
+                };
+                ("200 OK", "text/html", body)
+            };
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        }
+    });
+    (format!("http://{address}/start"), handle)
 }
 
 #[test]
@@ -668,6 +753,84 @@ fn update_without_names_confirms_each_mismatched_content_digest() {
         "# Manually changed skill\n"
     );
     server.join().unwrap();
+}
+
+#[test]
+fn update_without_changes_preserves_a_persisted_robots_requirement() {
+    let working_directory = TemporaryDirectory::new();
+    let (source_url, server) = robots_required_then_missing_server();
+
+    let created = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args([
+            "create",
+            &source_url,
+            "robots-required-docs",
+            "--require-robots-txt",
+            "true",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        created.status.success(),
+        "create failed: {}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let skill_path = working_directory
+        .path
+        .join(".agents/skills/robots-required-docs/SKILL.md");
+    let previous_content = fs::read_to_string(&skill_path).unwrap();
+
+    let updated = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["update", "robots-required-docs"])
+        .output()
+        .unwrap();
+    let requests = server.join().unwrap();
+
+    assert_eq!(updated.status.code(), Some(1));
+    assert!(
+        String::from_utf8(updated.stderr)
+            .unwrap()
+            .contains("robots.txt returned unexpected HTTP status 404")
+    );
+    assert_eq!(fs::read_to_string(skill_path).unwrap(), previous_content);
+    assert_eq!(requests, vec!["/robots.txt", "/start", "/robots.txt"]);
+}
+
+#[test]
+fn create_and_update_publish_unavailable_related_documentation_after_http_not_found() {
+    let working_directory = TemporaryDirectory::new();
+    let (source_url, server) = related_not_found_server();
+    let skill_path = working_directory
+        .path
+        .join(".agents/skills/missing-related-docs/SKILL.md");
+
+    let created = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["create", &source_url, "missing-related-docs"])
+        .output()
+        .unwrap();
+    assert!(created.status.success());
+    let initial_content = fs::read_to_string(&skill_path).unwrap();
+    assert!(initial_content.contains("Initial documentation."));
+    assert!(initial_content.contains("Documentation is unavailable for this source."));
+    assert!(initial_content.contains(&format!(
+        "{}/missing",
+        source_url.trim_end_matches("/start")
+    )));
+
+    let updated = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["update", "missing-related-docs"])
+        .output()
+        .unwrap();
+    server.join().unwrap();
+
+    assert!(updated.status.success());
+    let updated_content = fs::read_to_string(skill_path).unwrap();
+    assert!(updated_content.contains("Updated documentation."));
+    assert!(updated_content.contains("Documentation is unavailable for this source."));
 }
 
 #[test]

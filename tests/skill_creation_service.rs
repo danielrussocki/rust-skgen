@@ -68,6 +68,16 @@ impl DocumentFetcher for NonHtmlDocumentationFetcher {
     }
 }
 
+struct StatusDocumentationFetcher {
+    documents: BTreeMap<Url, FetchedDocument>,
+}
+
+impl DocumentFetcher for StatusDocumentationFetcher {
+    fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
+        Ok(self.documents[&url].clone())
+    }
+}
+
 struct AllowAllPolicy;
 
 impl CrawlPolicy for AllowAllPolicy {
@@ -128,6 +138,50 @@ fn creates_a_skill_from_local_documentation_with_attributed_sources() {
     .unwrap();
     assert_eq!(metadata.source_url().as_url(), &source_url);
     assert!(metadata.has_matching_content_digest(&content));
+}
+
+#[test]
+fn creates_a_complete_skill_when_a_related_page_returns_not_found() {
+    let skills = TemporarySkillsDirectory::new();
+    let source_url = Url::parse("https://docs.example.test/start").unwrap();
+    let missing_url = Url::parse("https://docs.example.test/missing").unwrap();
+    let name = SkillName::parse("missing-related-docs").unwrap();
+    let fetcher = StatusDocumentationFetcher {
+        documents: BTreeMap::from([
+            (
+                source_url.clone(),
+                FetchedDocument::new(
+                    source_url.clone(),
+                    200,
+                    "<main><p>Start documentation.</p><a href=\"/missing\">Missing</a></main>"
+                        .to_owned(),
+                ),
+            ),
+            (
+                missing_url.clone(),
+                FetchedDocument::new(missing_url.clone(), 404, "missing".to_owned()),
+            ),
+        ]),
+    };
+    let request = CreateSkillRequest::new(
+        name.clone(),
+        SourceUrl::parse(source_url.as_str()).unwrap(),
+        DiscoveryConfiguration::default(),
+    );
+
+    create_skill(
+        request,
+        &fetcher,
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    )
+    .expect("a related HTTP 404 should still publish a complete skill");
+
+    let content =
+        fs::read_to_string(skills.path().join(name.as_str()).join(SKILL_FILE_NAME)).unwrap();
+    assert!(content.contains("Start documentation."));
+    assert!(content.contains(&missing_url.to_string()));
+    assert!(content.contains("Documentation is unavailable for this source."));
 }
 
 #[test]

@@ -51,7 +51,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Si la persona usuaria no configura la exigencia de `robots.txt`, la CLI no deberá requerir que el sitio publique ese archivo para descubrir documentación relacionada.
 - Cuando la persona usuaria configure la exigencia de `robots.txt`, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial si no encuentra o no puede validar un archivo `robots.txt` aplicable.
 - Cuando el sitio publique un archivo `robots.txt` válido, la CLI deberá respetar sus reglas aplicables independientemente de que la persona usuaria haya configurado su exigencia.
-- Si la URL inicial o una página relacionada responde con una redirección, no puede extraerse, está prohibida por un archivo `robots.txt` válido o por las condiciones de acceso aplicables, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
+- Si la URL inicial responde con una redirección, no puede extraerse, está prohibida por un archivo `robots.txt` válido o por las condiciones de acceso aplicables, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
 - Si no se encuentra ninguna página de documentación válida para incluir, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
 
 ### RF-4. Contenido y procedencia de la skill
@@ -89,6 +89,13 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Si una actualización de varias skills contiene fallos, la CLI deberá continuar con las restantes, conservar la versión previa de cada skill fallida e indicar el resultado individual de cada skill.
 - Si una operación contiene al menos una skill fallida, la CLI deberá finalizar con un código de salida distinto de cero.
 
+### RF-8. URLs de documentación no encontradas
+
+- Cuando la URL base responda con cualquier error HTTP o de red, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
+- Cuando una URL de documentación relacionada responda con HTTP 404, la CLI deberá continuar la generación de la skill.
+- Cuando una URL de documentación relacionada responda con HTTP 404, la CLI deberá incluir en la skill una mención de que no hay documentación disponible para esa URL y recomendar buscar información en internet o en el código fuente correspondiente.
+- Cuando una URL de documentación relacionada responda con un error distinto de HTTP 404, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
+
 ## Requisitos no funcionales
 
 - La CLI deberá respetar las reglas aplicables de todo archivo `robots.txt` válido que encuentre, los términos de uso aplicables y los límites de acceso de cada sitio; salvo configuración expresa, la ausencia de `robots.txt` no impedirá el descubrimiento.
@@ -111,7 +118,9 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 
 ## Casos límite
 
-- La URL de origen o una URL relacionada redirige, no responde, responde con un error HTTP, está prohibida por las condiciones de acceso aplicables o devuelve contenido no apto para extraer documentación.
+- La URL base redirige, no responde, responde con cualquier error HTTP, está prohibida por las condiciones de acceso aplicables o devuelve contenido no apto para extraer documentación: la operación falla sin cambios parciales.
+- Una URL de documentación relacionada responde con HTTP 404: la generación continúa e incluye una mención de ausencia de documentación para esa URL con la recomendación de buscar en internet o en el código fuente correspondiente.
+- Una URL de documentación relacionada redirige, no responde, responde con un error distinto de HTTP 404, está prohibida por las condiciones de acceso aplicables o devuelve contenido no apto para extraer documentación: la operación falla sin cambios parciales.
 - El sitio no publica `robots.txt`, publica un archivo no válido o este no puede obtenerse: el descubrimiento continúa si no se exige su existencia y falla sin cambios parciales si se exige.
 - Un archivo `robots.txt` válido prohíbe acceder a la URL inicial o a una página relacionada, tanto si se exige su existencia como si no.
 - Una URL relacionada sale del alcance seleccionado, apunta a un subdominio no autorizado, vuelve a una página ya visitada o difiere de una URL ya visitada solo por fragmento o parámetros de consulta.

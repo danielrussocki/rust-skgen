@@ -7,6 +7,15 @@ use url::Url;
 pub trait CrawlPolicy {
     /// Returns whether the configured crawler may request the URL.
     fn allows(&self, url: &Url) -> Result<bool, RobotsError>;
+
+    /// Returns whether the URL is allowed with the skill's effective robots.txt requirement.
+    fn allows_with_robots_requirement(
+        &self,
+        url: &Url,
+        _requires_robots_txt: bool,
+    ) -> Result<bool, RobotsError> {
+        self.allows(url)
+    }
 }
 
 /// Evaluates access conditions applicable to a documentation URL.
@@ -63,6 +72,18 @@ impl<R: CrawlPolicy, A: AccessPolicy> CrawlPolicy for CombinedCrawlPolicy<R, A> 
             return Ok(false);
         }
         self.robots_policy.allows(url)
+    }
+
+    fn allows_with_robots_requirement(
+        &self,
+        url: &Url,
+        requires_robots_txt: bool,
+    ) -> Result<bool, RobotsError> {
+        if !self.access_policy.allows(url) {
+            return Ok(false);
+        }
+        self.robots_policy
+            .allows_with_robots_requirement(url, requires_robots_txt)
     }
 }
 
@@ -125,16 +146,24 @@ impl<F> RobotsTxtPolicy<F> {
 
 impl<F: DocumentFetcher> CrawlPolicy for RobotsTxtPolicy<F> {
     fn allows(&self, url: &Url) -> Result<bool, RobotsError> {
+        self.allows_with_robots_requirement(url, self.requires_robots_txt)
+    }
+
+    fn allows_with_robots_requirement(
+        &self,
+        url: &Url,
+        requires_robots_txt: bool,
+    ) -> Result<bool, RobotsError> {
         let robots_url = url
             .join("/robots.txt")
             .map_err(RobotsError::InvalidRobotsUrl)?;
         let document = match self.fetcher.fetch(robots_url) {
             Ok(document) => document,
-            Err(_) if !self.requires_robots_txt => return Ok(true),
+            Err(_) if !requires_robots_txt => return Ok(true),
             Err(error) => return Err(RobotsError::Fetch(error)),
         };
         if !(200..300).contains(&document.status()) {
-            return if self.requires_robots_txt {
+            return if requires_robots_txt {
                 Err(RobotsError::UnexpectedStatus(document.status()))
             } else {
                 Ok(true)
@@ -143,7 +172,7 @@ impl<F: DocumentFetcher> CrawlPolicy for RobotsTxtPolicy<F> {
 
         match RobotsRules::parse(document.body()) {
             Ok(rules) => Ok(rules.allows(url, &self.user_agent)),
-            Err(_) if !self.requires_robots_txt => Ok(true),
+            Err(_) if !requires_robots_txt => Ok(true),
             Err(error) => Err(error),
         }
     }
