@@ -51,7 +51,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Si la persona usuaria no configura la exigencia de `robots.txt`, la CLI no deberá requerir que el sitio publique ese archivo para descubrir documentación relacionada.
 - Cuando la persona usuaria configure la exigencia de `robots.txt`, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial si no encuentra o no puede validar un archivo `robots.txt` aplicable.
 - Cuando el sitio publique un archivo `robots.txt` válido, la CLI deberá respetar sus reglas aplicables independientemente de que la persona usuaria haya configurado su exigencia.
-- Si la URL inicial responde con una redirección, no puede extraerse, está prohibida por un archivo `robots.txt` válido o por las condiciones de acceso aplicables, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
+- Si la URL inicial responde con una redirección, devuelve contenido HTML que no puede extraerse, está prohibida por un archivo `robots.txt` válido o por las condiciones de acceso aplicables, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
 - Si no se encuentra ninguna página de documentación válida para incluir, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
 
 ### RF-4. Contenido y procedencia de la skill
@@ -96,6 +96,10 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 - Cuando una URL de documentación relacionada responda con HTTP 404, la CLI deberá incluir en la skill una mención de que no hay documentación disponible para esa URL y recomendar buscar información en internet o en el código fuente correspondiente.
 - Cuando una URL de documentación relacionada responda con un error distinto de HTTP 404, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
 
+### RF-9. Omisión de recursos no HTML
+
+- Cuando la CLI obtenga una respuesta correcta para una URL de documentación cuyo tipo de contenido no sea HTML, deberá omitir esa URL y su contenido de la skill, y deberá continuar el descubrimiento y la generación con las demás URLs disponibles.
+
 ## Requisitos no funcionales
 
 - La CLI deberá respetar las reglas aplicables de todo archivo `robots.txt` válido que encuentre, los términos de uso aplicables y los límites de acceso de cada sitio; salvo configuración expresa, la ausencia de `robots.txt` no impedirá el descubrimiento.
@@ -118,9 +122,10 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 
 ## Casos límite
 
-- La URL base redirige, no responde, responde con cualquier error HTTP, está prohibida por las condiciones de acceso aplicables o devuelve contenido no apto para extraer documentación: la operación falla sin cambios parciales.
+- La URL base redirige, no responde, responde con cualquier error HTTP, está prohibida por las condiciones de acceso aplicables o devuelve contenido HTML no apto para extraer documentación: la operación falla sin cambios parciales.
 - Una URL de documentación relacionada responde con HTTP 404: la generación continúa e incluye una mención de ausencia de documentación para esa URL con la recomendación de buscar en internet o en el código fuente correspondiente.
-- Una URL de documentación relacionada redirige, no responde, responde con un error distinto de HTTP 404, está prohibida por las condiciones de acceso aplicables o devuelve contenido no apto para extraer documentación: la operación falla sin cambios parciales.
+- Una URL de documentación relacionada redirige, no responde, responde con un error distinto de HTTP 404, está prohibida por las condiciones de acceso aplicables o devuelve contenido HTML no apto para extraer documentación: la operación falla sin cambios parciales.
+- La URL inicial o una URL de documentación relacionada responde correctamente con contenido no HTML, como una imagen, un PDF, una hoja de estilo, un script o un archivo descargable: la CLI omite esa URL y continúa con las demás URLs disponibles; si no queda ninguna página de documentación válida, la operación falla sin cambios parciales.
 - El sitio no publica `robots.txt`, publica un archivo no válido o este no puede obtenerse: el descubrimiento continúa si no se exige su existencia y falla sin cambios parciales si se exige.
 - Un archivo `robots.txt` válido prohíbe acceder a la URL inicial o a una página relacionada, tanto si se exige su existencia como si no.
 - Una URL relacionada sale del alcance seleccionado, apunta a un subdominio no autorizado, vuelve a una página ya visitada o difiere de una URL ya visitada solo por fragmento o parámetros de consulta.

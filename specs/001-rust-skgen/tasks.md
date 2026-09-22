@@ -327,3 +327,23 @@ Hecho cuando: `docs/traceability.md` referencia las pruebas de T74, T77, T79 y T
 - [x] T82. Ejecutar las verificaciones finales y revisar los criterios de finalización de la especificación.
 RF: RF-1 a RF-8.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y cada criterio de finalización y caso límite tiene una prueba determinista identificable.
+
+- [ ] T83. Añadir pruebas de regresión de descubrimiento para omitir URLs relacionadas con respuestas correctas no HTML.
+RF: RF-9.
+Hecho cuando: Una prueba con una página inicial, una URL relacionada no HTML y otra HTML válida verifica que la URL no HTML no aporta contenido, el descubrimiento continúa y devuelve las páginas HTML disponibles.
+
+- [ ] T84. Cambiar el descubrimiento para omitir respuestas 2xx no HTML de URLs relacionadas sin abortar la operación.
+RF: RF-9.
+Hecho cuando: Las pruebas de T83 pasan, una URL inicial no HTML sigue fallando si no queda ninguna página documental válida y una URL relacionada no HTML no provoca un error de descubrimiento.
+
+- [ ] T85. Añadir pruebas de servicio e integración para creación y actualización con una URL relacionada no HTML y páginas HTML válidas.
+RF: RF-2, RF-7, RF-9.
+Hecho cuando: Tests deterministas verifican que `create` y `update` publican o reemplazan una skill con las fuentes HTML restantes, omiten la URL no HTML y no dejan resultados parciales ante otros fallos.
+
+- [ ] T86. Completar la matriz de trazabilidad y su prueba de consistencia para RF-9.
+RF: RF-9.
+Hecho cuando: `docs/traceability.md` referencia las pruebas de T83 y T85, y `tests/traceability.rs` exige cobertura identificable para RF-1 a RF-9.
+
+- [ ] T87. Ejecutar las verificaciones finales y reevaluar los criterios de finalización afectados.
+RF: RF-2, RF-7, RF-9.
+Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y el criterio de finalización sobre pruebas deterministas incluye RF-9.
