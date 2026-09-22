@@ -348,54 +348,54 @@ Hecho cuando: `docs/traceability.md` referencia las pruebas de T83 y T85, y `tes
 RF: RF-2, RF-7, RF-9.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y el criterio de finalización sobre pruebas deterministas incluye RF-9.
 
-- [ ] T88. Añadir la dependencia de parseo XML de sitemap ya justificada en la especificación y verificar el manifiesto.
+- [x] T88. Añadir la dependencia de parseo XML de sitemap ya justificada en la especificación y verificar el manifiesto.
 RF: RF-10.
 Hecho cuando: `Cargo.toml` contiene únicamente una dependencia de parseo XML acorde con la justificación de RF-10 y `cargo check` finaliza correctamente.
 
-- [ ] T89. Definir y probar la extracción de URLs canónicas desde un sitemap XML de tipo `urlset`.
+- [x] T89. Definir y probar la extracción de URLs canónicas desde un sitemap XML de tipo `urlset`.
 RF: RF-10.
 Hecho cuando: Tests deterministas aceptan un `urlset` válido, devuelven sus valores `loc` en orden estable y rechazan XML que no representa un sitemap de URLs válido.
 
-- [ ] T90. Definir y probar la extracción de referencias desde un sitemap XML de tipo `sitemapindex`.
+- [x] T90. Definir y probar la extracción de referencias desde un sitemap XML de tipo `sitemapindex`.
 RF: RF-10.
 Hecho cuando: Tests deterministas distinguen un `sitemapindex` de un `urlset`, obtienen sus valores `loc` en orden estable y rechazan índices XML inválidos.
 
-- [ ] T91. Implementar la búsqueda determinista de las ubicaciones convencionales de sitemap.
+- [x] T91. Implementar la búsqueda determinista de las ubicaciones convencionales de sitemap.
 RF: RF-10.
 Hecho cuando: Un doble HTTP verifica que se prueban en orden `/sitemap.xml`, `/sitemap_index.xml`, `/sitemap-index.xml` y `/sitemap.php`, y que la primera respuesta XML válida detiene la búsqueda de ubicaciones convencionales.
 
-- [ ] T92. Implementar el procesamiento determinista de los sitemaps referenciados por un `sitemapindex`.
+- [x] T92. Implementar el procesamiento determinista de los sitemaps referenciados por un `sitemapindex`.
 RF: RF-10.
 Hecho cuando: Un test local con un índice y varios sitemaps referenciados devuelve las URLs canónicas combinadas en orden estable y no repite una URL presente en más de un documento.
 
-- [ ] T93. Tratar la ausencia, respuestas HTTP no exitosas, redirecciones, contenido no XML y XML inválido de sitemap como un fallback al recorrido HTML.
+- [x] T93. Tratar la ausencia, respuestas HTTP no exitosas, redirecciones, contenido no XML y XML inválido de sitemap como un fallback al recorrido HTML.
 RF: RF-10.
 Hecho cuando: Tests locales cubren cada caso y verifican que el descubrimiento por enlaces HTML continúa y puede generar una skill sin publicar resultados parciales.
 
-- [ ] T94. Integrar las URLs canónicas de sitemap como candidatas del descubrimiento antes de recorrer enlaces HTML.
+- [x] T94. Integrar las URLs canónicas de sitemap como candidatas del descubrimiento antes de recorrer enlaces HTML.
 RF: RF-3, RF-10.
 Hecho cuando: Un grafo local verifica que las URLs admisibles del sitemap se solicitan antes de las URLs encontradas en enlaces HTML y que las páginas adicionales encontradas después por enlaces también se incluyen.
 
-- [ ] T95. Aplicar alcance, límite de sitio, deduplicación y modo de recorrido existentes a las candidatas de sitemap.
+- [x] T95. Aplicar alcance, límite de sitio, deduplicación y modo de recorrido existentes a las candidatas de sitemap.
 RF: RF-3, RF-10.
 Hecho cuando: Tests deterministas excluyen URLs de sitemap fuera de alcance o repetidas por consulta o fragmento, y verifican el comportamiento de `all`, `one-level` y `limited`, incluido `max_pages`.
 
-- [ ] T96. Aplicar `robots.txt` y las condiciones de acceso a las URLs candidatas obtenidas desde sitemap.
+- [x] T96. Aplicar `robots.txt` y las condiciones de acceso a las URLs candidatas obtenidas desde sitemap.
 RF: RF-3, RF-10.
 Hecho cuando: Tests locales verifican que una URL de sitemap prohibida por una regla válida o por la política de acceso no se extrae y que las restantes URLs admisibles continúan descubriéndose.
 
-- [ ] T97. Añadir pruebas de servicio para creación y actualización usando un sitemap válido y el fallback sin sitemap utilizable.
+- [x] T97. Añadir pruebas de servicio para creación y actualización usando un sitemap válido y el fallback sin sitemap utilizable.
 RF: RF-2, RF-4, RF-8, RF-10.
 Hecho cuando: Tests deterministas verifican que `create` y `update` publican contenido atribuido desde URLs de sitemap, conservan la versión previa ante un fallo posterior y siguen funcionando mediante enlaces HTML cuando no hay sitemap utilizable.
 
-- [ ] T98. Añadir pruebas de integración del ejecutable para sitemap válido, índice de sitemaps y fallback a enlaces HTML.
+- [x] T98. Añadir pruebas de integración del ejecutable para sitemap válido, índice de sitemaps y fallback a enlaces HTML.
 RF: RF-1, RF-2, RF-7, RF-10.
 Hecho cuando: Un servidor local verifica por CLI el orden de consulta previo a enlaces HTML, la inclusión de URLs canónicas de un índice y el resultado exitoso cuando las ubicaciones convencionales no proporcionan un sitemap utilizable.
 
-- [ ] T99. Actualizar README, plan técnico y matriz de trazabilidad para RF-10 y sus casos límite.
+- [x] T99. Actualizar README, plan técnico y matriz de trazabilidad para RF-10 y sus casos límite.
 RF: RF-10.
 Hecho cuando: La documentación describe las ubicaciones convencionales, índices, restricciones de alcance y fallback, y `docs/traceability.md` referencia pruebas deterministas para cada cláusula y caso límite de RF-10.
 
-- [ ] T100. Ejecutar las verificaciones finales y comprobar la cobertura de RF-10.
+- [x] T100. Ejecutar las verificaciones finales y comprobar la cobertura de RF-10.
 RF: RF-1 a RF-10.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y `tests/traceability.rs` exige cobertura identificable para RF-1 a RF-10.

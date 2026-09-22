@@ -57,7 +57,7 @@ fn traceability_covers_related_non_html_responses() {
 
 #[test]
 fn traceability_lists_deterministic_coverage_for_every_functional_requirement() {
-    for requirement in 1..=9 {
+    for requirement in 1..=10 {
         let clause = format!("RF-{requirement}:");
         assert!(
             TRACEABILITY.contains(&clause),

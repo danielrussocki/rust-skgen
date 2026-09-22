@@ -58,7 +58,9 @@ struct StatusDocumentationFetcher {
 
 impl DocumentFetcher for StatusDocumentationFetcher {
     fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
-        Ok(self.documents[&url].clone())
+        Ok(self.documents.get(&url).cloned().unwrap_or_else(|| {
+            FetchedDocument::new_with_content_type(url, 404, String::new(), "text/plain".to_owned())
+        }))
     }
 }
 

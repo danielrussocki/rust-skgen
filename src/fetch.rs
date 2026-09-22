@@ -93,6 +93,18 @@ impl FetchedDocument {
         })
     }
 
+    /// Returns whether the response content type identifies XML.
+    pub fn is_xml(&self) -> bool {
+        self.content_type.as_deref().is_some_and(|content_type| {
+            let media_type = content_type
+                .split(';')
+                .next()
+                .map(str::trim)
+                .unwrap_or_default();
+            matches!(media_type, "application/xml" | "text/xml") || media_type.ends_with("+xml")
+        })
+    }
+
     /// Returns the response content type when the fetcher provided it.
     pub fn content_type(&self) -> Option<&str> {
         self.content_type.as_deref()

@@ -199,7 +199,7 @@ fn related_not_found_server() -> (String, thread::JoinHandle<()>) {
     let address = listener.local_addr().unwrap();
     let handle = thread::spawn(move || {
         let mut start_requests = 0;
-        for _ in 0..8 {
+        for _ in 0..16 {
             let (mut stream, _) = listener.accept().unwrap();
             let mut request = [0; 1024];
             let length = stream.read(&mut request).unwrap();
@@ -530,7 +530,7 @@ fn update_handles_all_skills_mixed_selections_and_individual_changes() {
     let skills_root = working_directory.path.join(".agents").join("skills");
     let current_name = SkillName::parse("managed-docs").unwrap();
     let initial_content = "# Previous skill\n";
-    let (source_url, server) = documentation_server_for_requests(6);
+    let (source_url, server) = documentation_server_for_requests(18);
     let metadata = ManagedSkillMetadata::new(
         SourceUrl::parse(&source_url).unwrap(),
         DiscoveryConfiguration::default(),
@@ -846,7 +846,18 @@ fn update_without_changes_preserves_a_persisted_robots_requirement() {
             .contains("robots.txt returned unexpected HTTP status 404")
     );
     assert_eq!(fs::read_to_string(skill_path).unwrap(), previous_content);
-    assert_eq!(requests, vec!["/robots.txt", "/start", "/robots.txt"]);
+    assert_eq!(
+        requests,
+        vec![
+            "/robots.txt",
+            "/start",
+            "/sitemap.xml",
+            "/sitemap_index.xml",
+            "/sitemap-index.xml",
+            "/sitemap.php",
+            "/robots.txt",
+        ]
+    );
 }
 
 #[test]

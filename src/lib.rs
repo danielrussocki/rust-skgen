@@ -9,4 +9,5 @@ pub mod metadata;
 pub mod policy;
 pub mod render;
 pub mod service;
+pub mod sitemap;
 pub mod storage;

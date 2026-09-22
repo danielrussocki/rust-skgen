@@ -116,6 +116,13 @@ Discovery attempts to evaluate `robots.txt` before requesting each documentation
 - Redirects and any related HTTP error other than 404 fail the affected skill without replacing
   its previous version.
 
+### Sitemap discovery
+
+Before following HTML links, discovery checks `/sitemap.xml`, `/sitemap_index.xml`,
+`/sitemap-index.xml`, and `/sitemap.php` in that order. Valid urlsets and sitemap indexes supply
+canonical candidates subject to scope, traversal, robots, and access policies. Unusable sitemap
+responses fall back to normal HTML-link discovery.
+
 Examples:
 
 ```powershell

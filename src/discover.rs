@@ -10,6 +10,7 @@ use crate::{
     extract::{DocumentExtractionError, extract_document, extract_links},
     fetch::{DocumentFetcher, FetchError},
     policy::{CrawlPolicy, RobotsError},
+    sitemap::find_sitemap_urls,
 };
 use scraper::{Html, Selector};
 use url::Url;
@@ -90,8 +91,14 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
     policy: &P,
 ) -> Result<Vec<DocumentationSource>, DiscoveryError> {
     let source_canonical = normalize_visit_url(&source_url);
-    let FetchOutcome::Document(source_document) =
-        fetch_document(source_url.clone(), true, configuration, fetcher, policy)?
+    let FetchOutcome::Document(source_document) = fetch_document(
+        source_url.clone(),
+        true,
+        false,
+        configuration,
+        fetcher,
+        policy,
+    )?
     else {
         return Err(DiscoveryError::UnexpectedStatus {
             url: source_url.clone(),
@@ -102,10 +109,17 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
         .map_err(DiscoveryError::Extraction)?;
     let navigation_urls = navigation_urls(&source_url, source_document.body());
     let mut visited = BTreeSet::from([source_canonical]);
-    let mut queue = source_links(&source_url, source_document.body(), configuration.scope());
+    let mut sitemap_queue = find_sitemap_urls(&source_url, fetcher)
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let mut link_queue = source_links(&source_url, source_document.body(), configuration.scope());
     let mut pages = vec![DocumentationSource::Extracted(source_page)];
 
-    while let Some(candidate) = queue.pop_first() {
+    while let Some((candidate, from_sitemap)) = sitemap_queue
+        .pop_first()
+        .map(|candidate| (candidate, true))
+        .or_else(|| link_queue.pop_first().map(|candidate| (candidate, false)))
+    {
         if maximum_reached(configuration, pages.len()) {
             break;
         }
@@ -117,22 +131,28 @@ pub fn discover_all<F: DocumentFetcher, P: CrawlPolicy>(
             continue;
         }
 
-        let document =
-            match fetch_document(candidate.clone(), false, configuration, fetcher, policy)? {
-                FetchOutcome::Document(document) => document,
-                FetchOutcome::Unavailable => {
-                    pages.push(DocumentationSource::unavailable(candidate));
-                    continue;
-                }
-                FetchOutcome::Skipped => continue,
-            };
+        let document = match fetch_document(
+            candidate.clone(),
+            false,
+            from_sitemap,
+            configuration,
+            fetcher,
+            policy,
+        )? {
+            FetchOutcome::Document(document) => document,
+            FetchOutcome::Unavailable => {
+                pages.push(DocumentationSource::unavailable(candidate));
+                continue;
+            }
+            FetchOutcome::Skipped => continue,
+        };
         let page = extract_document(candidate.clone(), document.body())
             .map_err(DiscoveryError::Extraction)?;
         pages.push(DocumentationSource::Extracted(page));
         if configuration.traversal_mode() != TraversalMode::OneLevel
             && !maximum_reached(configuration, pages.len())
         {
-            queue.extend(
+            link_queue.extend(
                 extract_links(&candidate, document.body())
                     .into_iter()
                     .map(|url| normalize_visit_url(&url)),
@@ -154,6 +174,7 @@ fn maximum_reached(configuration: &DiscoveryConfiguration, page_count: usize) ->
 fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
     url: Url,
     is_source: bool,
+    skip_if_forbidden: bool,
     configuration: &DiscoveryConfiguration,
     fetcher: &F,
     policy: &P,
@@ -162,6 +183,9 @@ fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
         .allows_with_robots_requirement(&url, configuration.requires_robots_txt())
         .map_err(DiscoveryError::Policy)?
     {
+        if skip_if_forbidden {
+            return Ok(FetchOutcome::Skipped);
+        }
         return Err(DiscoveryError::Forbidden(url));
     }
 
@@ -384,8 +408,17 @@ mod tests {
 
     impl DocumentFetcher for StatusFetcher {
         fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
-            self.fetched_urls.borrow_mut().push(url.clone());
-            Ok(self.documents[&url].clone())
+            if !is_sitemap_location(&url) {
+                self.fetched_urls.borrow_mut().push(url.clone());
+            }
+            Ok(self.documents.get(&url).cloned().unwrap_or_else(|| {
+                FetchedDocument::new_with_content_type(
+                    url,
+                    404,
+                    String::new(),
+                    "text/plain".to_owned(),
+                )
+            }))
         }
     }
 
@@ -400,11 +433,19 @@ mod tests {
 
     impl DocumentFetcher for GraphFetcher {
         fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
-            self.fetched_urls.borrow_mut().push(url.clone());
-            Ok(FetchedDocument::new(
-                url.clone(),
-                200,
-                self.documents[&url].clone(),
+            if !is_sitemap_location(&url) {
+                self.fetched_urls.borrow_mut().push(url.clone());
+            }
+            Ok(self.documents.get(&url).map_or_else(
+                || {
+                    FetchedDocument::new_with_content_type(
+                        url.clone(),
+                        404,
+                        String::new(),
+                        "text/plain".to_owned(),
+                    )
+                },
+                |body| FetchedDocument::new(url.clone(), 200, body.clone()),
             ))
         }
     }
@@ -439,14 +480,18 @@ mod tests {
 
     impl DocumentFetcher for SourceRedirectingFetcher {
         fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
-            self.fetched_urls.borrow_mut().push(url.clone());
+            if !is_sitemap_location(&url) {
+                self.fetched_urls.borrow_mut().push(url.clone());
+            }
             Ok(FetchedDocument::new(url, 302, String::new()))
         }
     }
 
     impl DocumentFetcher for RedirectingFetcher {
         fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
-            self.fetched_urls.borrow_mut().push(url.clone());
+            if !is_sitemap_location(&url) {
+                self.fetched_urls.borrow_mut().push(url.clone());
+            }
             let (status, body) = if url == self.source_url {
                 (
                     200,
@@ -455,7 +500,7 @@ mod tests {
             } else if url == self.redirect_url {
                 (302, String::new())
             } else {
-                panic!("unexpected URL requested by test fetcher: {url}");
+                (404, String::new())
             };
 
             Ok(FetchedDocument::new(url, status, body))
@@ -464,6 +509,13 @@ mod tests {
 
     fn url(path: &str) -> Url {
         Url::parse(&format!("https://docs.example.com{path}")).expect("test URL must be valid")
+    }
+
+    fn is_sitemap_location(url: &Url) -> bool {
+        matches!(
+            url.path(),
+            "/sitemap.xml" | "/sitemap_index.xml" | "/sitemap-index.xml" | "/sitemap.php"
+        )
     }
 
     fn document(body: &str) -> String {

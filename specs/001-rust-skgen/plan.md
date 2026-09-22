@@ -2,7 +2,7 @@
 
 ## Alcance y trazabilidad
 
-Este plan implementa exclusivamente la especificación 001. La creación, protección frente a sobrescritura, descubrimiento, contenido, actualización, resultado, gestión de URLs no encontradas y omisión de recursos no HTML se cubren respectivamente en RF-1, RF-2, RF-3, RF-4, RF-5, RF-6, RF-7, RF-8 y RF-9.
+Este plan implementa exclusivamente la especificación 001. La creación, protección frente a sobrescritura, descubrimiento, contenido, actualización, resultado, gestión de URLs no encontradas, omisión de recursos no HTML y descubrimiento previo por sitemap se cubren respectivamente en RF-1 a RF-10.
 
 ## Estructura de módulos
 
