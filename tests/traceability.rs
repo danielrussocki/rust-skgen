@@ -1,6 +1,27 @@
 const TRACEABILITY: &str = include_str!("../docs/traceability.md");
 
 #[test]
+fn traceability_references_existing_tests() {
+    for reference in TRACEABILITY
+        .split('`')
+        .filter(|value| value.contains(".rs::"))
+    {
+        let Some((path, test_name)) = reference.split_once(".rs::") else {
+            continue;
+        };
+        let source_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("{path}.rs"));
+        let test_name = test_name.trim_start_matches("tests::");
+        let source = std::fs::read_to_string(&source_path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", source_path.display()));
+        assert!(
+            source.contains(&format!("fn {test_name}")),
+            "traceability reference does not identify an existing test: {reference}"
+        );
+    }
+}
+
+#[test]
 fn traceability_covers_optional_robots_txt_cases() {
     for reference in [
         "tests/discovery_configuration.rs::robots_txt_is_optional_by_default_and_can_be_explicitly_required",

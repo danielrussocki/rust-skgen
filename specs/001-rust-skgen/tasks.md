@@ -455,3 +455,15 @@ Hecho cuando: `docs/traceability.md` referencia pruebas deterministas para la re
 - [x] T114. Ejecutar las verificaciones finales y comprobar la cobertura de RF-12.
 RF: RF-1 a RF-12.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y cada cláusula y escenario EARS de RF-12 tiene una prueba determinista identificable.
+
+- [x] T115. Añadir una regresión determinista para el fallo atómico cuando no queda ninguna página documental válida al omitir URLs relacionadas redirigidas.
+RF: RF-2, RF-12.
+Hecho cuando: Un test de descubrimiento o servicio verifica que una operación con URLs relacionadas redirigidas y sin páginas documentales válidas falla y no devuelve ni publica resultados parciales.
+
+- [x] T116. Corregir la matriz de trazabilidad de redirecciones y validar que todas sus referencias apunten a tests existentes.
+RF: RF-3, RF-12.
+Hecho cuando: `docs/traceability.md` deja de referenciar `redirect_response_aborts_discovery_without_returning_partial_pages`, referencia los tests vigentes de URL inicial y relacionada redirigidas, y un test de consistencia comprueba esas referencias.
+
+- [x] T117. Ejecutar las verificaciones finales y reevaluar los criterios de finalización de RF-12.
+RF: RF-1 a RF-12.
+Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y la trazabilidad no contiene referencias a tests inexistentes ni casos límite de RF-12 sin prueba determinista identificable.

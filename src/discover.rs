@@ -854,6 +854,44 @@ mod tests {
     }
 
     #[test]
+    fn related_redirects_without_any_documentation_page_abort_without_results() {
+        let source_url = url("/start");
+        let redirect_url = url("/redirect");
+        let fetcher = StatusFetcher {
+            documents: BTreeMap::from([
+                (
+                    source_url.clone(),
+                    FetchedDocument::new(
+                        source_url.clone(),
+                        200,
+                        "<main><a href=\"/redirect\">Redirect</a></main>".to_owned(),
+                    ),
+                ),
+                (
+                    redirect_url,
+                    FetchedDocument::new(url("/redirect"), 302, String::new()),
+                ),
+            ]),
+            fetched_urls: RefCell::new(Vec::new()),
+        };
+
+        let result = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        );
+
+        assert!(matches!(
+            result,
+            Err(DiscoveryError::Extraction(
+                DocumentExtractionError::NoDocumentationContent
+            ))
+        ));
+        assert_eq!(fetcher.fetched_urls.into_inner(), vec![source_url]);
+    }
+
+    #[test]
     fn source_redirect_aborts_discovery_before_related_pages_are_visited() {
         let source_url = url("/start");
         let fetcher = SourceRedirectingFetcher {
