@@ -467,3 +467,19 @@ Hecho cuando: `docs/traceability.md` deja de referenciar `redirect_response_abor
 - [x] T117. Ejecutar las verificaciones finales y reevaluar los criterios de finalización de RF-12.
 RF: RF-1 a RF-12.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y la trazabilidad no contiene referencias a tests inexistentes ni casos límite de RF-12 sin prueba determinista identificable.
+
+- [x] T118. Resolver en la especificación y el plan la contradicción entre incluir siempre la URL inicial extraíble y fallar tras omitir todas las URLs relacionadas redirigidas sin páginas válidas.
+RF: RF-3, RF-12.
+Hecho cuando: La especificación y el plan definen un único resultado alcanzable para una URL inicial extraíble con todas las URLs relacionadas redirigidas, sin requisitos incompatibles.
+
+- [x] T119. Añadir una regresión de descubrimiento para el resultado definido cuando una URL inicial extraíble enlaza únicamente a URLs relacionadas redirigidas.
+RF: RF-3, RF-12.
+Hecho cuando: El doble HTTP confirma que se solicitan las URLs relacionadas, no se sigue ninguna redirección y el test verifica exactamente el resultado definido por T118.
+
+- [x] T120. Ajustar el descubrimiento para cumplir el resultado de T118 sin alterar la atomicidad ni la inclusión obligatoria de la URL inicial cuando corresponda.
+RF: RF-2, RF-3, RF-12.
+Hecho cuando: La prueba de T119 pasa y las regresiones de URL inicial redirigida, URL relacionada redirigida y fallo atómico continúan pasando.
+
+- [x] T121. Actualizar la trazabilidad de RF-12 y ejecutar la validación final de la especificación.
+RF: RF-1 a RF-12.
+Hecho cuando: `docs/traceability.md` referencia la regresión de T119, `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente.

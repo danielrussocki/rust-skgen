@@ -108,6 +108,7 @@ fn traceability_covers_related_redirects() {
     for reference in [
         "src/discover.rs::tests::source_redirect_aborts_discovery_before_related_pages_are_visited",
         "src/discover.rs::tests::related_redirect_is_skipped_while_remaining_html_pages_are_discovered",
+        "src/discover.rs::tests::extractable_source_is_published_when_all_related_urls_redirect",
         "tests/skill_creation_service.rs::creates_a_skill_while_skipping_a_related_redirect",
         "tests/skill_update_service.rs::updating_a_skill_skips_a_related_redirect",
         "tests/cli_integration.rs::create_and_update_skip_related_redirects_without_following_them",

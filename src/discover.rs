@@ -854,6 +854,57 @@ mod tests {
     }
 
     #[test]
+    fn extractable_source_is_published_when_all_related_urls_redirect() {
+        let source_url = url("/start");
+        let first_redirect_url = url("/first-redirect");
+        let second_redirect_url = url("/second-redirect");
+        let fetcher = StatusFetcher {
+            documents: BTreeMap::from([
+                (
+                    source_url.clone(),
+                    FetchedDocument::new(
+                        source_url.clone(),
+                        200,
+                        format!(
+                            "{}<a href=\"/first-redirect\">First</a><a href=\"/second-redirect\">Second</a>",
+                            document("Start")
+                        ),
+                    ),
+                ),
+                (
+                    first_redirect_url.clone(),
+                    FetchedDocument::new(first_redirect_url.clone(), 302, String::new()),
+                ),
+                (
+                    second_redirect_url.clone(),
+                    FetchedDocument::new(second_redirect_url.clone(), 301, String::new()),
+                ),
+            ]),
+            fetched_urls: RefCell::new(Vec::new()),
+        };
+
+        let pages = discover_all(
+            source_url.clone(),
+            &DiscoveryConfiguration::default(),
+            &fetcher,
+            &AllowAllPolicy,
+        )
+        .expect("an extractable source should remain publishable after related redirects");
+
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.source_url().clone())
+                .collect::<Vec<_>>(),
+            vec![source_url.clone()]
+        );
+        assert_eq!(
+            fetcher.fetched_urls.into_inner(),
+            vec![source_url, first_redirect_url, second_redirect_url]
+        );
+    }
+
+    #[test]
     fn related_redirects_without_any_documentation_page_abort_without_results() {
         let source_url = url("/start");
         let redirect_url = url("/redirect");

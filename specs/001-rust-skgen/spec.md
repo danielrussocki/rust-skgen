@@ -130,13 +130,13 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 
 - Si la URL inicial responde con una redirección, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
 - Cuando una URL de documentación relacionada responda con una redirección, la CLI deberá omitir esa URL, no deberá seguir la redirección ni incluir su contenido en la skill, y deberá continuar el descubrimiento y la generación con las demás URLs disponibles.
-- Si, tras omitir URLs relacionadas redirigidas, no queda ninguna página de documentación válida para incluir, la CLI deberá tratar la operación para esa skill como fallida y no deberá guardar una creación ni actualización parcial.
+- Cuando la URL inicial sea extraíble, deberá contar como página de documentación válida; por tanto, si todas las URLs relacionadas se omiten por redirección, la CLI deberá generar la skill con la URL inicial y sin seguir ni incluir las redirecciones.
 
 ### Escenarios EARS de RF-12
 
 - Cuando la URL inicial responda con una redirección, la CLI deberá informar el fallo de la skill sin crearla ni actualizarla parcialmente.
 - Cuando una URL relacionada responda con una redirección y existan otras URLs relacionadas extraíbles, la CLI deberá omitir la URL redirigida y generar la skill con las demás páginas válidas.
-- Cuando todas las páginas relacionadas disponibles respondan con una redirección y no exista ninguna página de documentación válida, la CLI deberá fallar la operación sin crear ni actualizar parcialmente la skill.
+- Cuando la URL inicial sea extraíble y todas las páginas relacionadas disponibles respondan con una redirección, la CLI deberá generar la skill solo con la página inicial.
 
 ## Requisitos no funcionales
 
@@ -163,7 +163,7 @@ Las personas que usan agentes de IA necesitan convertir documentación pública 
 
 - La URL base redirige, no responde, responde con cualquier error HTTP, está prohibida por las condiciones de acceso aplicables o devuelve contenido HTML no apto para extraer documentación: la operación falla sin cambios parciales.
 - Una URL de documentación relacionada responde con HTTP 404: la generación continúa e incluye una mención de ausencia de documentación para esa URL con la recomendación de buscar en internet o en el código fuente correspondiente.
-- Una URL de documentación relacionada redirige: la CLI la omite, no sigue la redirección y continúa con las demás URLs disponibles; si no queda ninguna página de documentación válida, la operación falla sin cambios parciales.
+- Una URL de documentación relacionada redirige: la CLI la omite, no sigue la redirección y continúa con las demás URLs disponibles; una URL inicial extraíble se conserva como página válida y permite generar la skill.
 - Una URL de documentación relacionada no responde, responde con un error distinto de HTTP 404, está prohibida por las condiciones de acceso aplicables o devuelve contenido HTML no apto para extraer documentación: la operación falla sin cambios parciales.
 - La URL inicial o una URL de documentación relacionada responde correctamente con contenido no HTML, como una imagen, un PDF, una hoja de estilo, un script o un archivo descargable: la CLI omite esa URL y continúa con las demás URLs disponibles; si no queda ninguna página de documentación válida, la operación falla sin cambios parciales.
 - El sitio no publica `robots.txt`, publica un archivo no válido o este no puede obtenerse: el descubrimiento continúa si no se exige su existencia y falla sin cambios parciales si se exige.

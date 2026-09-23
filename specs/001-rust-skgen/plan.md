@@ -98,7 +98,7 @@ function build_skill(configuration, previous_skill):
         if traversal is one-level: do not enqueue its links
         if traversal is limited: enqueue links until max_pages is reached
 
-    fail if pending set has no valid documentation page
+    fail if pending set has no valid documentation page; an extracted source page is already a valid page
     render the selected content format from sources sorted by canonical URL
     include an attributed unavailable-source notice recommending internet or source-code research
     derive guide objective and instructions only from extracted content
@@ -110,7 +110,7 @@ function build_skill(configuration, previous_skill):
     release lock and return the per-skill result
 ```
 
-El modo `limited` cuenta la página inicial dentro de `max_pages`; al alcanzar el límite no es un error y se publica lo ya extraído. Las fuentes relacionadas con HTTP 404 cuentan como fuentes no disponibles y no se expanden. Las respuestas relacionadas correctas no HTML y las redirecciones se omiten y no aportan contenido; las redirecciones no se siguen. La prioridad suma señales sin distinguir mayúsculas en ruta, ancla y navegación (`docs`, `guide`, `api`, `reference`, `components`) y resta las señales penalizadas (`blog`, `changelog`, `releases`, `supported-browsers`, `privacy`, `terms`, `careers`) y destinos de imagen, recurso estático o red social. Los empates se resuelven por URL canónica; las candidatas de sitemap conservan precedencia sobre enlaces HTML y la prioridad no altera alcance, límite de sitio, robots ni acceso. El modo `all` y esta cola ordenada garantizan resultados repetibles para las mismas fuentes. Si una operación de lote llama a este algoritmo para varias skills, continúa tras cada fallo individual. **Cubre RF-3, RF-4, RF-6, RF-7, RF-8, RF-9, RF-10, RF-11 y RF-12.**
+El modo `limited` cuenta la página inicial dentro de `max_pages`; al alcanzar el límite no es un error y se publica lo ya extraído. Las fuentes relacionadas con HTTP 404 cuentan como fuentes no disponibles y no se expanden. Las respuestas relacionadas correctas no HTML y las redirecciones se omiten y no aportan contenido; las redirecciones no se siguen. Como la URL inicial se extrae antes del recorrido y se añade incondicionalmente, si todas las URLs relacionadas se omiten por redirección se publica una skill con esa única página inicial. La prioridad suma señales sin distinguir mayúsculas en ruta, ancla y navegación (`docs`, `guide`, `api`, `reference`, `components`) y resta las señales penalizadas (`blog`, `changelog`, `releases`, `supported-browsers`, `privacy`, `terms`, `careers`) y destinos de imagen, recurso estático o red social. Los empates se resuelven por URL canónica; las candidatas de sitemap conservan precedencia sobre enlaces HTML y la prioridad no altera alcance, límite de sitio, robots ni acceso. El modo `all` y esta cola ordenada garantizan resultados repetibles para las mismas fuentes. Si una operación de lote llama a este algoritmo para varias skills, continúa tras cada fallo individual. **Cubre RF-3, RF-4, RF-6, RF-7, RF-8, RF-9, RF-10, RF-11 y RF-12.**
 
 ## Contrato de la CLI
 
