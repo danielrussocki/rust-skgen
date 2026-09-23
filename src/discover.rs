@@ -242,6 +242,9 @@ fn fetch_document<F: DocumentFetcher, P: CrawlPolicy>(
     }
 
     let document = fetcher.fetch(url.clone()).map_err(DiscoveryError::Fetch)?;
+    if (300..400).contains(&document.status()) && !is_source {
+        return Ok(FetchOutcome::Skipped);
+    }
     if (300..400).contains(&document.status()) {
         return Err(DiscoveryError::Redirect(url));
     }
@@ -529,12 +532,6 @@ mod tests {
         }
     }
 
-    struct RedirectingFetcher {
-        source_url: Url,
-        redirect_url: Url,
-        fetched_urls: RefCell<Vec<Url>>,
-    }
-
     struct SourceRedirectingFetcher {
         fetched_urls: RefCell<Vec<Url>>,
     }
@@ -545,26 +542,6 @@ mod tests {
                 self.fetched_urls.borrow_mut().push(url.clone());
             }
             Ok(FetchedDocument::new(url, 302, String::new()))
-        }
-    }
-
-    impl DocumentFetcher for RedirectingFetcher {
-        fn fetch(&self, url: Url) -> Result<FetchedDocument, FetchError> {
-            if !is_sitemap_location(&url) {
-                self.fetched_urls.borrow_mut().push(url.clone());
-            }
-            let (status, body) = if url == self.source_url {
-                (
-                    200,
-                    document("Start") + "<a href=\"/redirect\">Redirect</a>",
-                )
-            } else if url == self.redirect_url {
-                (302, String::new())
-            } else {
-                (404, String::new())
-            };
-
-            Ok(FetchedDocument::new(url, status, body))
         }
     }
 
@@ -826,26 +803,53 @@ mod tests {
     }
 
     #[test]
-    fn redirect_response_aborts_discovery_without_returning_partial_pages() {
+    fn related_redirect_is_skipped_while_remaining_html_pages_are_discovered() {
         let source_url = url("/start");
         let redirect_url = url("/redirect");
-        let fetcher = RedirectingFetcher {
-            source_url: source_url.clone(),
-            redirect_url: redirect_url.clone(),
+        let related_url = url("/related");
+        let fetcher = StatusFetcher {
+            documents: BTreeMap::from([
+                (
+                    source_url.clone(),
+                    FetchedDocument::new(
+                        source_url.clone(),
+                        200,
+                        format!(
+                            "{}<a href=\"/redirect\">Redirect</a><a href=\"/related\">Related</a>",
+                            document("Start")
+                        ),
+                    ),
+                ),
+                (
+                    redirect_url.clone(),
+                    FetchedDocument::new(redirect_url.clone(), 302, String::new()),
+                ),
+                (
+                    related_url.clone(),
+                    FetchedDocument::new(related_url.clone(), 200, document("Related")),
+                ),
+            ]),
             fetched_urls: RefCell::new(Vec::new()),
         };
 
-        let result = discover_all(
+        let pages = discover_all(
             source_url.clone(),
             &DiscoveryConfiguration::default(),
             &fetcher,
             &AllowAllPolicy,
-        );
+        )
+        .expect("a related redirect should not abort discovery");
 
-        assert!(matches!(result, Err(DiscoveryError::Redirect(url)) if url == redirect_url));
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.source_url().clone())
+                .collect::<Vec<_>>(),
+            vec![related_url.clone(), source_url.clone()]
+        );
         assert_eq!(
             fetcher.fetched_urls.into_inner(),
-            vec![source_url, redirect_url]
+            vec![source_url, redirect_url, related_url]
         );
     }
 

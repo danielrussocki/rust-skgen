@@ -280,6 +280,61 @@ fn related_non_html_server() -> (String, thread::JoinHandle<()>) {
     (format!("http://{address}/start"), handle)
 }
 
+fn related_redirect_server() -> (String, thread::JoinHandle<Vec<String>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut requests = Vec::new();
+        let mut start_requests = 0;
+        while Instant::now() < deadline {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    stream.set_nonblocking(false).unwrap();
+                    let mut request = [0; 1024];
+                    let length = stream.read(&mut request).unwrap();
+                    let request = String::from_utf8_lossy(&request[..length]);
+                    let path = request.split_whitespace().nth(1).unwrap().to_owned();
+                    let response = if path == "/redirect" {
+                        "HTTP/1.1 302 Found\r\nLocation: /moved\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+                    } else {
+                        let (status, content_type, body) = if path == "/robots.txt" {
+                            ("200 OK", "text/plain", "User-agent: *\nAllow: /\n")
+                        } else if path == "/related" {
+                            (
+                                "200 OK",
+                                "text/html",
+                                "<main><p>Related documentation.</p></main>",
+                            )
+                        } else {
+                            start_requests += 1;
+                            let body = if start_requests == 1 {
+                                "<main><p>Initial documentation.</p><a href=\"/redirect\">Redirect</a><a href=\"/related\">Related</a></main>"
+                            } else {
+                                "<main><p>Updated documentation.</p><a href=\"/redirect\">Redirect</a><a href=\"/related\">Related</a></main>"
+                            };
+                            ("200 OK", "text/html", body)
+                        };
+                        format!(
+                            "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
+                    };
+                    requests.push(path);
+                    stream.write_all(response.as_bytes()).unwrap();
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("test server failed to accept a request: {error}"),
+            }
+        }
+        requests
+    });
+    (format!("http://{address}/start"), handle)
+}
+
 #[test]
 fn create_publishes_only_under_the_current_working_directory_skills_root() {
     let working_directory = TemporaryDirectory::new();
@@ -873,7 +928,11 @@ fn create_and_update_publish_unavailable_related_documentation_after_http_not_fo
         .args(["create", &source_url, "missing-related-docs"])
         .output()
         .unwrap();
-    assert!(created.status.success());
+    assert!(
+        created.status.success(),
+        "create failed: {}",
+        String::from_utf8_lossy(&created.stderr)
+    );
     let initial_content = fs::read_to_string(&skill_path).unwrap();
     assert!(initial_content.contains("Initial documentation."));
     assert!(initial_content.contains("Documentation is unavailable for this source."));
@@ -926,6 +985,40 @@ fn create_and_update_skip_related_non_html_documentation() {
     assert!(updated_content.contains("Updated documentation."));
     assert!(updated_content.contains("Related documentation."));
     assert!(!updated_content.contains("/data"));
+}
+
+#[test]
+fn create_and_update_skip_related_redirects_without_following_them() {
+    let working_directory = TemporaryDirectory::new();
+    let (source_url, server) = related_redirect_server();
+    let skill_path = working_directory
+        .path
+        .join(".agents/skills/related-redirect-docs/SKILL.md");
+
+    let created = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["create", &source_url, "related-redirect-docs"])
+        .output()
+        .unwrap();
+    assert!(created.status.success());
+    let initial_content = fs::read_to_string(&skill_path).unwrap();
+    assert!(initial_content.contains("Initial documentation."));
+    assert!(initial_content.contains("Related documentation."));
+    assert!(!initial_content.contains("/redirect"));
+
+    let updated = Command::new(env!("CARGO_BIN_EXE_rust-skgen"))
+        .current_dir(&working_directory.path)
+        .args(["update", "related-redirect-docs"])
+        .output()
+        .unwrap();
+    let requests = server.join().unwrap();
+
+    assert!(updated.status.success());
+    let updated_content = fs::read_to_string(skill_path).unwrap();
+    assert!(updated_content.contains("Updated documentation."));
+    assert!(updated_content.contains("Related documentation."));
+    assert!(!updated_content.contains("/redirect"));
+    assert!(!requests.iter().any(|path| path == "/moved"));
 }
 
 #[test]

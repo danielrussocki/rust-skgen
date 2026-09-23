@@ -57,7 +57,7 @@ fn traceability_covers_related_non_html_responses() {
 
 #[test]
 fn traceability_lists_deterministic_coverage_for_every_functional_requirement() {
-    for requirement in 1..=11 {
+    for requirement in 1..=12 {
         let clause = format!("RF-{requirement}:");
         assert!(
             TRACEABILITY.contains(&clause),
@@ -74,6 +74,22 @@ fn traceability_covers_deterministic_link_prioritization() {
         "src/discover.rs::tests::prioritizes_html_candidates_before_fetching_and_breaks_ties_by_canonical_url",
         "tests/sitemap_discovery.rs::prioritizes_sitemap_candidates_before_html_candidates",
         "src/discover.rs::tests::limited_traversal_uses_priority_for_mixed_signals_without_relaxing_scope",
+    ] {
+        assert!(
+            TRACEABILITY.contains(reference),
+            "missing traceability reference: {reference}"
+        );
+    }
+}
+
+#[test]
+fn traceability_covers_related_redirects() {
+    for reference in [
+        "src/discover.rs::tests::source_redirect_aborts_discovery_before_related_pages_are_visited",
+        "src/discover.rs::tests::related_redirect_is_skipped_while_remaining_html_pages_are_discovered",
+        "tests/skill_creation_service.rs::creates_a_skill_while_skipping_a_related_redirect",
+        "tests/skill_update_service.rs::updating_a_skill_skips_a_related_redirect",
+        "tests/cli_integration.rs::create_and_update_skip_related_redirects_without_following_them",
     ] {
         assert!(
             TRACEABILITY.contains(reference),

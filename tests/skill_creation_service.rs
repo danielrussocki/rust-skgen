@@ -250,6 +250,58 @@ fn creates_a_skill_while_skipping_a_related_non_html_response() {
 }
 
 #[test]
+fn creates_a_skill_while_skipping_a_related_redirect() {
+    let skills = TemporarySkillsDirectory::new();
+    let source_url = Url::parse("https://docs.example.test/start").unwrap();
+    let redirect_url = Url::parse("https://docs.example.test/redirect").unwrap();
+    let related_url = Url::parse("https://docs.example.test/related").unwrap();
+    let name = SkillName::parse("related-redirect-docs").unwrap();
+    let fetcher = StatusDocumentationFetcher {
+        documents: BTreeMap::from([
+            (
+                source_url.clone(),
+                FetchedDocument::new(
+                    source_url.clone(),
+                    200,
+                    "<main><p>Start documentation.</p><a href=\"/redirect\">Redirect</a><a href=\"/related\">Related</a></main>".to_owned(),
+                ),
+            ),
+            (
+                redirect_url.clone(),
+                FetchedDocument::new(redirect_url.clone(), 302, String::new()),
+            ),
+            (
+                related_url.clone(),
+                FetchedDocument::new(
+                    related_url.clone(),
+                    200,
+                    "<main><p>Related documentation.</p></main>".to_owned(),
+                ),
+            ),
+        ]),
+    };
+    let request = CreateSkillRequest::new(
+        name.clone(),
+        SourceUrl::parse(source_url.as_str()).unwrap(),
+        DiscoveryConfiguration::default(),
+    );
+
+    create_skill(
+        request,
+        &fetcher,
+        &AllowAllPolicy,
+        &TransactionalSkillCreator::new(skills.path()),
+    )
+    .expect("a related redirect should not prevent skill creation");
+
+    let content =
+        fs::read_to_string(skills.path().join(name.as_str()).join(SKILL_FILE_NAME)).unwrap();
+    assert!(content.contains("Start documentation."));
+    assert!(content.contains("Related documentation."));
+    assert!(!content.contains(&redirect_url.to_string()));
+}
+
+#[test]
 fn does_not_publish_a_skill_when_access_conditions_forbid_a_related_page() {
     let skills = TemporarySkillsDirectory::new();
     let source_url = Url::parse("https://docs.example.test/start").unwrap();

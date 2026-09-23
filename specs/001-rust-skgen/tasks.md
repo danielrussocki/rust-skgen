@@ -436,22 +436,22 @@ Hecho cuando: La documentación describe las señales, el desempate, el efecto s
 RF: RF-1 a RF-11.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y `tests/traceability.rs` exige cobertura identificable para RF-1 a RF-11.
 
-- [ ] T110. Añadir pruebas de descubrimiento para distinguir una redirección de la URL inicial de una redirección de una URL relacionada.
+- [x] T110. Añadir pruebas de descubrimiento para distinguir una redirección de la URL inicial de una redirección de una URL relacionada.
 RF: RF-12.
 Hecho cuando: Tests deterministas verifican que una redirección de la URL inicial falla sin devolver páginas parciales y que una URL relacionada redirigida se omite sin seguirla mientras se conservan las demás páginas HTML válidas.
 
-- [ ] T111. Ajustar el descubrimiento para omitir las redirecciones de URLs relacionadas sin seguir su destino.
+- [x] T111. Ajustar el descubrimiento para omitir las redirecciones de URLs relacionadas sin seguir su destino.
 RF: RF-12.
 Hecho cuando: Pasan las pruebas de T110 y, si tras omitir las URLs relacionadas redirigidas no queda ninguna página documental válida, el descubrimiento falla sin resultados parciales.
 
-- [ ] T112. Añadir pruebas de servicio y de integración para creación y actualización con URLs relacionadas redirigidas.
+- [x] T112. Añadir pruebas de servicio y de integración para creación y actualización con URLs relacionadas redirigidas.
 RF: RF-2, RF-7, RF-12.
 Hecho cuando: Un servidor local demuestra que `create` publica una skill con las páginas válidas restantes y que `update` reemplaza una skill con las páginas válidas restantes, sin seguir ni incluir la URL redirigida; una redirección de la URL inicial conserva el fallo atómico.
 
-- [ ] T113. Actualizar la matriz de trazabilidad y su prueba de consistencia para RF-12 y los casos límite de redirecciones.
+- [x] T113. Actualizar la matriz de trazabilidad y su prueba de consistencia para RF-12 y los casos límite de redirecciones.
 RF: RF-12.
 Hecho cuando: `docs/traceability.md` referencia pruebas deterministas para la redirección inicial fallida, la omisión de una URL relacionada redirigida y la ausencia de páginas válidas posterior, y `tests/traceability.rs` exige cobertura identificable para RF-1 a RF-12.
 
-- [ ] T114. Ejecutar las verificaciones finales y comprobar la cobertura de RF-12.
+- [x] T114. Ejecutar las verificaciones finales y comprobar la cobertura de RF-12.
 RF: RF-1 a RF-12.
 Hecho cuando: `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings` y `cargo test` finalizan correctamente, y cada cláusula y escenario EARS de RF-12 tiene una prueba determinista identificable.

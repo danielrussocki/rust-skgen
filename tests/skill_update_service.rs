@@ -217,6 +217,57 @@ fn updating_a_skill_skips_a_related_non_html_response() {
 }
 
 #[test]
+fn updating_a_skill_skips_a_related_redirect() {
+    let skills = TemporarySkillsDirectory::new();
+    let name = SkillName::parse("related-redirect-docs").unwrap();
+    let source_url = Url::parse("https://docs.example.test/start").unwrap();
+    let redirect_url = Url::parse("https://docs.example.test/redirect").unwrap();
+    let related_url = Url::parse("https://docs.example.test/related").unwrap();
+    let creator = TransactionalSkillCreator::new(skills.path());
+    creator
+        .create(&name, "# Previous skill\n", &initial_metadata())
+        .unwrap();
+    let fetcher = StatusDocumentationFetcher {
+        documents: BTreeMap::from([
+            (
+                source_url.clone(),
+                FetchedDocument::new(
+                    source_url.clone(),
+                    200,
+                    "<main><p>Updated documentation.</p><a href=\"/redirect\">Redirect</a><a href=\"/related\">Related</a></main>".to_owned(),
+                ),
+            ),
+            (
+                redirect_url.clone(),
+                FetchedDocument::new(redirect_url.clone(), 302, String::new()),
+            ),
+            (
+                related_url.clone(),
+                FetchedDocument::new(
+                    related_url.clone(),
+                    200,
+                    "<main><p>Related documentation.</p></main>".to_owned(),
+                ),
+            ),
+        ]),
+    };
+
+    update_skill(
+        UpdateSkillRequest::new(name.clone()),
+        &fetcher,
+        &AllowAllPolicy,
+        &creator,
+    )
+    .expect("a related redirect should not prevent an update");
+
+    let content =
+        fs::read_to_string(skills.path().join(name.as_str()).join(SKILL_FILE_NAME)).unwrap();
+    assert!(content.contains("Updated documentation."));
+    assert!(content.contains("Related documentation."));
+    assert!(!content.contains(&redirect_url.to_string()));
+}
+
+#[test]
 fn updating_all_managed_skills_reports_an_empty_result_when_none_exist() {
     let skills = TemporarySkillsDirectory::new();
 
